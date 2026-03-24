@@ -1507,33 +1507,32 @@ body.theme-dark .tl-note {
   color: var(--text-muted);
 }
 
-/* Multi-image wrap in table layout */
+/* Multi-image wrap in table layout — vertical stack, images fill column width */
 .qt-img-multi-wrap {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px;
-  min-height: 60px;
-  align-items: flex-start;
+  flex-direction: column;  /* vertical stack */
+  gap: 0;
+  padding: 0;
+  align-items: stretch;
 }
 
 .qt-img-thumb {
   flex: 0 0 auto;
-  width: calc(50% - 4px);
+  width: 100%;             /* full column width */
   cursor: zoom-in;
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
 }
 
-.qt-img-thumb:only-child {
-  width: 100%;
+.qt-img-thumb:last-child {
+  border-bottom: none;
 }
 
 .qt-img-thumb img {
   width: 100%;
-  height: 80px;
-  object-fit: contain;
-  background: #555;
+  height: 160px;           /* taller per image since they stack vertically */
+  object-fit: cover;
   display: block;
 }
 
