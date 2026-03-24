@@ -1460,13 +1460,12 @@ function renderTableLayout() {
   bindInlineImageZones($previewCanvas);
 }
 
-// ===== Copy Table to Clipboard =====
+// ===== Copy Table to Clipboard (HTML format with merged cells + colors) =====
 function copyTableToClipboard() {
-  const title = STATE.questTitle || '';
   const steps = STATE.steps;
   if (!steps.length) { showToast('⚠️ 没有环节可复制'); return; }
 
-  // Collect all custom field keys across all steps
+  // Collect all custom field keys across all steps (in order of appearance)
   const customKeys = [];
   steps.forEach(s => {
     (s.customFields || []).forEach(f => {
@@ -1474,47 +1473,146 @@ function copyTableToClipboard() {
     });
   });
 
-  // Row definitions (same order as table)
-  const rowDefs = [
-    { label: '环节名称',  get: s => s.name || '' },
-    { label: '任务类型',  get: s => s.taskType ? (TASK_TYPE_MAP[s.taskType]?.label || s.taskType) : '' },
-    { label: '触发方式',  get: s => s.trigger || '' },
-    { label: '位置',      get: s => s.location || '' },
-    { label: '出场人物',  get: s => s.characters || '' },
+  // Field rows to generate (label + getter)
+  const fieldDefs = [
+    { label: '触发方式', get: s => s.trigger || '' },
+    { label: '位置',     get: s => s.location || '' },
+    { label: '出场人物', get: s => s.characters || '' },
     ...customKeys.map(k => ({
       label: k,
-      get: s => {
-        const cf = (s.customFields || []).find(f => f.key === k);
-        return cf ? (cf.value || '') : '';
-      }
+      get: s => { const cf = (s.customFields||[]).find(f=>f.key===k); return cf ? cf.value||'' : ''; }
     })),
-    { label: '描述/备注', get: s => s.desc || '' },
   ];
 
-  // Build TSV: first row = header (step names), subsequent rows = field values
-  // Format: first col = row label, then one col per step
-  const headerRow = ['字段 \\ 环节', ...steps.map(s => s.name || '未命名环节')].join('\t');
-  const dataRows = rowDefs.map(rd => {
-    const cells = [rd.label, ...steps.map(s => rd.get(s).replace(/\t/g, ' ').replace(/\n/g, ' '))];
-    return cells.join('\t');
-  });
+  // Helper: escape HTML
+  const h = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  const tsv = [headerRow, ...dataRows].join('\n');
+  // Helper: hex color to rgba with alpha for background
+  const hexToRgba = (hex, alpha) => {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  };
 
-  navigator.clipboard.writeText(tsv).then(() => {
-    showToast('✅ 已复制！可直接粘贴到 Excel / 飞书表格');
-  }).catch(() => {
-    // Fallback for older browsers
+  // Each step occupies 2 columns: [label col | value col]
+  // Total columns = steps.length * 2
+  const totalCols = steps.length * 2;
+
+  // ── Base styles ──
+  const baseStyle = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;border-collapse:collapse;`;
+  const cellBorder = `border:1px solid #aaa;`;
+  const labelStyle = `${cellBorder}padding:3px 5px;background:#f5f5f5;color:#444;font-weight:600;white-space:nowrap;vertical-align:top;width:52px;`;
+  const valStyle   = `${cellBorder}padding:3px 6px;vertical-align:top;word-break:break-word;`;
+  const descStyle  = `${cellBorder}padding:5px 6px;vertical-align:top;word-break:break-word;font-size:10px;color:#333;`;
+
+  // ── Row 1: image row ──
+  // Each step's image(s) merged across 2 cols
+  const imgCells = steps.map(step => {
+    const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
+    const color = getStepColor(step, steps.indexOf(step));
+    const imgContent = imgs.length > 0
+      ? imgs.map(url => `<img src="${h(url)}" style="max-width:120px;max-height:90px;display:block;margin:0 auto 2px;">`).join('')
+      : `<div style="width:120px;height:80px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;">无图</div>`;
+    return `<td colspan="2" style="${cellBorder}padding:4px;text-align:center;background:${hexToRgba(color,0.08)};">${imgContent}</td>`;
+  }).join('');
+  const row1 = `<tr>${imgCells}</tr>`;
+
+  // ── Row 2: colored title header ──
+  const titleCells = steps.map((step, i) => {
+    const color = getStepColor(step, i);
+    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
+    const typeBadge = typeInfo
+      ? `<span style="display:inline-block;margin-left:4px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.3);color:#fff;">${h(typeInfo.label)}</span>`
+      : '';
+    return `<td colspan="2" style="${cellBorder}padding:6px 8px;background:${color};color:#fff;font-weight:700;font-size:12px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);">
+      ${h(step.name || '未命名环节')}${typeBadge}
+    </td>`;
+  }).join('');
+  const row2 = `<tr>${titleCells}</tr>`;
+
+  // ── Field rows ──
+  const fieldRows = fieldDefs.map(fd => {
+    const cells = steps.map((step, i) => {
+      const color = getStepColor(step, i);
+      const val = fd.get(step);
+      return `<td style="${labelStyle}">${h(fd.label)}：</td>` +
+             `<td style="${valStyle}background:${hexToRgba(color,0.04)};">${h(val || '—')}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  // ── Description row ──
+  const descCells = steps.map((step, i) => {
+    const color = getStepColor(step, i);
+    const desc = (step.desc || '').replace(/\n/g, '<br>');
+    return `<td colspan="2" style="${descStyle}background:${hexToRgba(color,0.04)};">${desc}</td>`;
+  }).join('');
+  const descRow = `<tr>${descCells}</tr>`;
+
+  // ── Assemble full HTML table ──
+  const tableHtml = `
+<table style="${baseStyle}" cellspacing="0" cellpadding="0">
+  <tbody>
+    ${row1}
+    ${row2}
+    ${fieldRows}
+    ${descRow}
+  </tbody>
+</table>`;
+
+  // Write both HTML and plain-text to clipboard
+  const plainText = steps.map(s => {
+    const lines = [s.name || '未命名环节'];
+    if (s.trigger)    lines.push(`触发方式：${s.trigger}`);
+    if (s.location)   lines.push(`位置：${s.location}`);
+    if (s.characters) lines.push(`出场人物：${s.characters}`);
+    (s.customFields||[]).forEach(f => { if(f.key) lines.push(`${f.key}：${f.value||''}`); });
+    if (s.desc) lines.push(s.desc);
+    return lines.join('\n');
+  }).join('\n\n');
+
+  try {
+    const clipItem = new ClipboardItem({
+      'text/html':  new Blob([tableHtml], { type: 'text/html' }),
+      'text/plain': new Blob([plainText],  { type: 'text/plain' }),
+    });
+    navigator.clipboard.write([clipItem]).then(() => {
+      showToast('✅ 已复制！可直接粘贴到飞书/Excel 表格（保留格式）');
+    }).catch(err => {
+      console.warn('ClipboardItem write failed, fallback:', err);
+      _copyHtmlFallback(tableHtml, plainText);
+    });
+  } catch(e) {
+    _copyHtmlFallback(tableHtml, plainText);
+  }
+}
+
+function _copyHtmlFallback(html, plain) {
+  // Use a hidden contenteditable div to write rich HTML to clipboard
+  const div = document.createElement('div');
+  div.contentEditable = 'true';
+  div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(div);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  try {
+    document.execCommand('copy');
+    showToast('✅ 已复制！可直接粘贴到飞书/Excel 表格（保留格式）');
+  } catch(e) {
+    // Last resort: plain text
     const ta = document.createElement('textarea');
-    ta.value = tsv;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.value = plain;
+    ta.style.cssText = 'position:fixed;top:-9999px;opacity:0;';
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast('✅ 已复制！可直接粘贴到 Excel / 飞书表格');
-  });
+    showToast('✅ 已复制（纯文本格式）');
+  }
+  document.body.removeChild(div);
 }
 
 function onTableCellBlur(e) {
