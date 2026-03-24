@@ -545,8 +545,10 @@ function openAiImportPanel() {
               <span>② 粘贴 AI 输出的 JSON，点击导入</span>
               <div class="ai-import-mode-row">
                 <label><input type="radio" name="ai-import-mode" value="add" checked> 追加到当前 QDD</label>
+                <label><input type="radio" name="ai-import-mode" value="patch"> 修改指定环节</label>
                 <label><input type="radio" name="ai-import-mode" value="new"> 创建为新 QDD</label>
               </div>
+              <div class="ai-import-mode-hint" id="ai-import-mode-hint"></div>
             </div>
             <textarea class="ai-json-input" id="ai-json-input" placeholder='粘贴 AI 输出的 JSON 到这里...\n\n支持格式：\n• 单个 QDD 对象：{ "title": "...", "steps": [...] }\n• 多个 QDD 数组：[{ "title": "...", "steps": [...] }, ...]'></textarea>
             <div class="ai-import-actions">
@@ -562,6 +564,25 @@ function openAiImportPanel() {
     overlay.addEventListener('click', e => { if (e.target === overlay) closeAiImportPanel(); });
   }
   overlay.classList.add('visible');
+
+  // Bind mode radio hint
+  overlay.querySelectorAll('input[name="ai-import-mode"]').forEach(radio => {
+    radio.addEventListener('change', updateAiModeHint);
+  });
+  updateAiModeHint();
+}
+
+function updateAiModeHint() {
+  const hint = document.getElementById('ai-import-mode-hint');
+  if (!hint) return;
+  const mode = document.querySelector('input[name="ai-import-mode"]:checked')?.value;
+  const msgs = {
+    add:   '',
+    patch: '💡 按环节编号（index）或名称匹配，只更新 JSON 里有值的字段，原有图片/空字段保留不变；找不到匹配则追加为新环节。JSON 中每个环节需包含 "index" 或 "name" 字段用于定位。',
+    new:   '',
+  };
+  hint.textContent = msgs[mode] || '';
+  hint.style.display = msgs[mode] ? 'block' : 'none';
 }
 
 function escHtml(str) {
@@ -638,7 +659,40 @@ function doAiImport() {
   const mode = document.querySelector('input[name="ai-import-mode"]:checked')?.value || 'new';
   const { qdds } = result;
   pushHistory();
-  if (mode === 'add') {
+
+  if (mode === 'patch') {
+    // ── 修改指定环节模式 ──
+    const currentQdd = getCurrentQdd();
+    if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
+    const srcSteps = (qdds[0].steps || []);
+    let matched = 0, added = 0;
+    srcSteps.forEach(incoming => {
+      // Match by index field first, then by name
+      let target = null;
+      const idxStr = incoming.index != null ? String(incoming.index).trim() : '';
+      if (idxStr) {
+        target = currentQdd.steps.find(s => String(s.index || '').trim() === idxStr);
+      }
+      if (!target && incoming.name) {
+        target = currentQdd.steps.find(s => s.name === incoming.name);
+      }
+      if (target) {
+        mergeAiStep(target, incoming);
+        matched++;
+      } else {
+        // No match → append as new step
+        currentQdd.steps.push(normalizeAiStep(incoming));
+        added++;
+      }
+    });
+    syncStateFromQdd(currentQdd);
+    saveAllQdds();
+    renderAll();
+    const msg = `✅ 已更新 ${matched} 个环节${added > 0 ? `，追加 ${added} 个新环节` : ''}`;
+    setAiFeedback(msg, false);
+    showToast(msg);
+
+  } else if (mode === 'add') {
     const currentQdd = getCurrentQdd();
     if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
     const srcQdd = qdds[0];
@@ -649,6 +703,7 @@ function doAiImport() {
     renderAll();
     setAiFeedback(`✅ 已追加 ${newSteps.length} 个环节到当前 QDD`, false);
     showToast(`已追加 ${newSteps.length} 个环节`);
+
   } else {
     for (const raw of qdds) {
       const newQdd = {
@@ -669,6 +724,7 @@ function doAiImport() {
 function normalizeAiStep(raw) {
   return {
     id:            genId(),
+    index:         raw.index != null ? String(raw.index) : '',
     name:          raw.name         || '未命名环节',
     taskType:      raw.taskType     || '',
     trigger:       raw.trigger      || '',
@@ -683,6 +739,44 @@ function normalizeAiStep(raw) {
       ? raw.customFields.map(f => ({ key: f.key || '', value: f.value || '' }))
       : [],
   };
+}
+
+/**
+ * Merge incoming AI step data into an existing step.
+ * Only fields that are non-empty in `incoming` will overwrite the existing value.
+ * Fields not present or empty in incoming are left untouched (preserves images, etc.)
+ */
+function mergeAiStep(existing, incoming) {
+  const str = v => (v != null ? String(v).trim() : '');
+  if (str(incoming.index))      existing.index      = str(incoming.index);
+  if (str(incoming.name))       existing.name       = str(incoming.name);
+  if (str(incoming.taskType))   existing.taskType   = str(incoming.taskType);
+  if (str(incoming.trigger))    existing.trigger    = str(incoming.trigger);
+  if (str(incoming.location))   existing.location   = str(incoming.location);
+  if (str(incoming.characters)) existing.characters = str(incoming.characters);
+  if (str(incoming.desc))       existing.desc       = str(incoming.desc);
+  if (str(incoming.color))      existing.color      = str(incoming.color);
+  if (str(incoming.colorOverride)) existing.colorOverride = str(incoming.colorOverride);
+  // Images: only overwrite if incoming has non-empty images array
+  if (Array.isArray(incoming.images) && incoming.images.length > 0) {
+    existing.images = incoming.images;
+  }
+  if (str(incoming.imageUrl) && (!existing.images || existing.images.length === 0)) {
+    existing.imageUrl = str(incoming.imageUrl);
+  }
+  // customFields: merge per key — add new keys, update existing keys if value non-empty
+  if (Array.isArray(incoming.customFields)) {
+    if (!Array.isArray(existing.customFields)) existing.customFields = [];
+    incoming.customFields.forEach(f => {
+      if (!f.key) return;
+      const found = existing.customFields.find(e => e.key === f.key);
+      if (found) {
+        if (str(f.value)) found.value = str(f.value);
+      } else {
+        existing.customFields.push({ key: f.key, value: str(f.value) });
+      }
+    });
+  }
 }
 
 // ===== JSON Backup / Restore =====
@@ -1378,9 +1472,10 @@ function renderTableLayout() {
     // ── Colored title header ──
     const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
     const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
+    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
     const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
       <div class="qt-col-header-inner">
-        <span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
+        ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
         ${badgeHtml}
       </div>
     </div>`;
