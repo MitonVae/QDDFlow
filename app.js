@@ -1460,31 +1460,12 @@ function renderTableLayout() {
   bindInlineImageZones($previewCanvas);
 }
 
-// ===== Copy Table to Clipboard (HTML format with merged cells + colors) =====
+// ===== Copy Table to Clipboard (HTML format, per-column independent field rows) =====
 function copyTableToClipboard() {
   const steps = STATE.steps;
   if (!steps.length) { showToast('⚠️ 没有环节可复制'); return; }
 
-  // Collect all custom field keys across all steps (in order of appearance)
-  const customKeys = [];
-  steps.forEach(s => {
-    (s.customFields || []).forEach(f => {
-      if (f.key && !customKeys.includes(f.key)) customKeys.push(f.key);
-    });
-  });
-
-  // All possible field defs (label + getter)
-  const fieldDefs = [
-    { label: '触发方式', get: s => s.trigger || '' },
-    { label: '位置',     get: s => s.location || '' },
-    { label: '出场人物', get: s => s.characters || '' },
-    ...customKeys.map(k => ({
-      label: k,
-      get: s => { const cf = (s.customFields||[]).find(f=>f.key===k); return cf ? cf.value||'' : ''; }
-    })),
-  ];
-
-  // Helper: escape HTML special chars
+  // Helper: escape HTML
   const h = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   // Helper: hex → rgba
@@ -1494,64 +1475,64 @@ function copyTableToClipboard() {
   };
 
   // ── Styles ──
-  const baseStyle  = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;border-collapse:collapse;`;
-  const cellBorder = `border:1px solid #bbb;`;
-  const labelStyle = `${cellBorder}padding:4px 6px;background:#f0f0f0;color:#444;font-weight:600;white-space:nowrap;vertical-align:middle;width:56px;`;
-  const valStyle   = `${cellBorder}padding:4px 7px;vertical-align:middle;word-break:break-word;`;
-  const descStyle  = `${cellBorder}padding:6px 8px;vertical-align:top;word-break:break-word;font-size:11px;color:#222;line-height:1.6;`;
-  const imgCellStyle = `${cellBorder}padding:6px;text-align:center;vertical-align:middle;`;
+  const outerBorder = `border:1px solid #bbb;`;
+  const innerBorder = `border:0;`;
+  const labelStyle  = `padding:3px 5px;background:#f0f0f0;color:#444;font-weight:600;white-space:nowrap;vertical-align:top;font-size:11px;`;
+  const valStyle    = `padding:3px 6px;vertical-align:top;word-break:break-word;font-size:11px;`;
+  const descStyle   = `padding:5px 7px;vertical-align:top;word-break:break-word;font-size:11px;color:#222;line-height:1.6;`;
+  const imgCellSt   = `padding:5px;text-align:center;vertical-align:middle;`;
 
-  // ── Row 1: image row — colspan=2 per step ──
-  const imgCells = steps.map((step, i) => {
+  // ── Build one <td> block per step ──
+  // Each step is ONE outer <td> containing a nested mini-table
+  const stepTds = steps.map((step, i) => {
+    const color = getStepColor(step, i);
+    const bg    = hexToRgba(color, 0.05);
+
+    // 1. Image sub-row
     const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
-    const color = getStepColor(step, i);
-    const bg = hexToRgba(color, 0.07);
     const imgContent = imgs.length > 0
-      ? imgs.map(url => `<img src="${h(url)}" style="max-width:140px;max-height:100px;display:inline-block;margin:2px;vertical-align:middle;">`).join('')
+      ? imgs.map(url => `<img src="${h(url)}" style="max-width:180px;max-height:120px;display:inline-block;margin:2px;vertical-align:middle;">`).join('')
       : `<span style="font-size:11px;color:#aaa;">🖼 在属性面板添加配图</span>`;
-    return `<td colspan="2" style="${imgCellStyle}background:${bg};height:80px;">${imgContent}</td>`;
-  }).join('');
-  const row1 = `<tr>${imgCells}</tr>`;
+    const imgRow = `<tr><td colspan="2" style="${imgCellSt}background:${hexToRgba(color,0.07)};height:80px;">${imgContent}</td></tr>`;
 
-  // ── Row 2: colored title header — name + type badge on new line, colspan=2 ──
-  const titleCells = steps.map((step, i) => {
-    const color = getStepColor(step, i);
+    // 2. Title row (name + type badge on new line)
     const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    // Type badge: dark pill on new line, centered
     const typeLine = typeInfo
       ? `<div style="margin-top:4px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.35);color:#fff;letter-spacing:0.5px;">${h(typeInfo.value)}</span></div>`
       : '';
-    return `<td colspan="2" style="${cellBorder}padding:8px 6px 7px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1.3;">${h(step.name || '未命名环节')}${typeLine}</td>`;
+    const titleRow = `<tr><td colspan="2" style="padding:8px 6px 7px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1.3;">${h(step.name || '未命名环节')}${typeLine}</td></tr>`;
+
+    // 3. Field rows — only fields with a non-empty value for THIS step
+    const allFieldDefs = [
+      { label: '触发方式', val: step.trigger || '' },
+      { label: '位置',     val: step.location || '' },
+      { label: '出场人物', val: step.characters || '' },
+      ...(step.customFields || []).filter(f => f.key).map(f => ({ label: f.key, val: f.value || '' })),
+    ];
+    const fieldRows = allFieldDefs
+      .filter(fd => fd.val.trim() !== '')   // ← skip empty fields entirely
+      .map(fd => `<tr>
+        <td style="${labelStyle}border-right:1px solid #ddd;">${h(fd.label)}：</td>
+        <td style="${valStyle}background:${bg};">${h(fd.val)}</td>
+      </tr>`)
+      .join('');
+
+    // 4. Description row (only if non-empty)
+    const desc = (step.desc || '').trim();
+    const descRow = desc
+      ? `<tr><td colspan="2" style="${descStyle}background:${bg};border-top:1px solid #ddd;">${desc.replace(/\n/g,'<br>')}</td></tr>`
+      : '';
+
+    // Assemble inner mini-table for this step
+    const innerTable = `<table style="border-collapse:collapse;width:100%;font-family:微软雅黑,Arial,sans-serif;" cellspacing="0" cellpadding="0">
+      <tbody>${imgRow}${titleRow}${fieldRows}${descRow}</tbody>
+    </table>`;
+
+    return `<td style="${outerBorder}padding:0;vertical-align:top;min-width:180px;">${innerTable}</td>`;
   }).join('');
-  const row2 = `<tr>${titleCells}</tr>`;
 
-  // ── Field rows — only render rows where at least one step has a value ──
-  const fieldRows = fieldDefs.map(fd => {
-    // Check if any step has a non-empty value for this field
-    const hasAny = steps.some(s => fd.get(s).trim() !== '');
-    if (!hasAny) return ''; // skip entirely if all empty
-    const cells = steps.map((step, i) => {
-      const color = getStepColor(step, i);
-      const val = fd.get(step).trim();
-      return `<td style="${labelStyle}">${h(fd.label)}：</td>` +
-             `<td style="${valStyle}background:${hexToRgba(color,0.05)};">${val ? h(val) : '<span style="color:#bbb;">—</span>'}</td>`;
-    }).join('');
-    return `<tr>${cells}</tr>`;
-  }).join('');
-
-  // ── Description row — colspan=2, only show if any desc exists ──
-  const hasAnyDesc = steps.some(s => (s.desc || '').trim() !== '');
-  const descRow = hasAnyDesc ? (() => {
-    const descCells = steps.map((step, i) => {
-      const color = getStepColor(step, i);
-      const desc = (step.desc || '').trim().replace(/\n/g, '<br>');
-      return `<td colspan="2" style="${descStyle}background:${hexToRgba(color,0.05)};">${desc || ''}</td>`;
-    }).join('');
-    return `<tr>${descCells}</tr>`;
-  })() : '';
-
-  // ── Assemble ──
-  const tableHtml = `<table style="${baseStyle}" cellspacing="0" cellpadding="0"><tbody>${row1}${row2}${fieldRows}${descRow}</tbody></table>`;
+  // ── Outer wrapper row ──
+  const tableHtml = `<table style="border-collapse:collapse;font-family:微软雅黑,Arial,sans-serif;" cellspacing="0" cellpadding="0"><tbody><tr>${stepTds}</tr></tbody></table>`;
 
   // Write both HTML and plain-text to clipboard
   const plainText = steps.map(s => {
