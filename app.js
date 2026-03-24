@@ -1521,16 +1521,56 @@ function copyTableToClipboard() {
     return `<td colspan="2" style="${B}${fnt}padding:7px 6px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);line-height:1.4;">${h(step.name||'未命名环节')}${badge}</td>`;
   }).join('');
 
-  // ── Field rows — one <tr> per active field ──
-  const fieldRowsHtml = activeFields.map(fd => {
-    const cells = steps.map((step, i) => {
-      const color = getStepColor(step, i);
-      const v = fd.get(step).trim();
-      if (!v) {
-        // This step has no value: show two empty cells (no label, no dash)
-        return `<td style="${emp()}"></td><td style="${emp()}"></td>`;
+  // ── Field rows with rowspan merging ──
+  // For each step (column), merge consecutive empty field rows into one spanning cell.
+  // Build a 2D grid: grid[rowIdx][stepIdx] = { html, skip }
+  //   html  = the <td> pair string to emit
+  //   skip  = true means this cell was absorbed into a rowspan above, don't emit
+
+  const nRows = activeFields.length;
+  const nSteps = steps.length;
+
+  // grid[row][col] = { html: string, skip: bool }
+  const grid = Array.from({length: nRows}, () => Array.from({length: nSteps}, () => ({html:'', skip:false})));
+
+  steps.forEach((step, si) => {
+    const color = getStepColor(step, si);
+    const bg = hexToRgba(color, 0.05);
+
+    // Mark which rows are empty for this step
+    const isEmpty = activeFields.map(fd => fd.get(step).trim() === '');
+
+    let ri = 0;
+    while (ri < nRows) {
+      if (!isEmpty[ri]) {
+        // Has value — normal label+value pair
+        const fd = activeFields[ri];
+        const v  = fd.get(step).trim();
+        grid[ri][si].html = `<td style="${lbl(color)}">${h(fd.label)}：</td><td style="${val(color)}">${h(v)}</td>`;
+        ri++;
+      } else {
+        // Find the run of consecutive empty rows for this step
+        let runEnd = ri;
+        while (runEnd < nRows && isEmpty[runEnd]) runEnd++;
+        const span = runEnd - ri;
+
+        // Emit one merged empty cell spanning `span` rows (colspan=2, rowspan=span)
+        const spanAttr = span > 1 ? ` rowspan="${span}"` : '';
+        grid[ri][si].html = `<td colspan="2"${spanAttr} style="${B}${fnt}padding:0;background:${bg};"></td>`;
+        // Mark subsequent rows in this run as skip
+        for (let k = ri + 1; k < runEnd; k++) {
+          grid[k][si].skip = true;
+        }
+        ri = runEnd;
       }
-      return `<td style="${lbl(color)}">${h(fd.label)}：</td><td style="${val(color)}">${h(v)}</td>`;
+    }
+  });
+
+  // Assemble rows
+  const fieldRowsHtml = Array.from({length: nRows}, (_, ri) => {
+    const cells = steps.map((_, si) => {
+      if (grid[ri][si].skip) return '';
+      return grid[ri][si].html;
     }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
