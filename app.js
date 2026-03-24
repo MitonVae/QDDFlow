@@ -1491,9 +1491,9 @@ function renderTableLayout() {
             <img src="${esc(url)}" loading="lazy" onerror="this.style.display='none'">
           </div>`).join('')
       : '';
-    const img = `<div class="qt-col-img${imgs.length === 0 ? ' qt-col-img-empty' : ''} qt-img-multi-wrap" data-step-id="${step.id}">
+    const img = `<div class="qt-col-img qt-img-zone${imgs.length === 0 ? ' qt-col-img-empty' : ''} qt-img-multi-wrap" data-step-id="${step.id}" tabindex="0">
       ${imgInner}
-      ${imgs.length === 0 ? '<span class="qt-img-empty-hint">📷 在属性面板添加配图</span>' : ''}
+      ${imgs.length === 0 ? '<span class="qt-img-empty-hint">� 拖入或 Ctrl+V 粘贴图片</span>' : ''}
     </div>`;
 
     // ── Fields: nested 2-col table [label | value] — skip empty rows ──
@@ -2162,14 +2162,11 @@ function readInlineImageFile(file, stepId) {
       return;
     }
 
-    // Legacy single-image mode (clicking from preview zone)
+    // Inline mode: always append the new image (drag/paste into the image zone)
     if (!step.images) step.images = step.imageUrl ? [step.imageUrl] : [];
-    // Replace first image or add
-    if (step.images.length === 0) step.images.push(dataUrl);
-    else step.images[0] = dataUrl;
-    step.imageUrl = dataUrl;
+    step.images.push(dataUrl);
+    step.imageUrl = step.images[0]; // keep legacy in sync
     saveAllQdds();
-    // Re-render preview
     if (STATE.layout === 'table') renderTableLayout();
     else renderTimelineLayout();
   };
