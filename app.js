@@ -1522,7 +1522,7 @@ function renderTableLayout() {
 
     // ── Description ──
     const desc = `<div class="qt-col-desc" contenteditable="true"
-      data-step-id="${step.id}" data-field="desc">${esc(step.desc || '')}</div>`;
+      data-step-id="${step.id}" data-field="desc">${escWithBr(step.desc || '')}</div>`;
 
     return `<td class="qt-step-cell" valign="top">
       <div class="qt-step-inner">${header}${img}${fields}${desc}</div>
@@ -1880,6 +1880,7 @@ function renderStepPanel() {
         ${imgItems}
         <div class="pp-img-drop-zone" data-step-id="${step.id}"
           onclick="addPanelImage('${step.id}')"
+          tabindex="0"
           title="点击添加 / 拖入图片 / Ctrl+V">
           📷 拖入或点击添加
         </div>
@@ -2025,21 +2026,7 @@ function addMultipleSteps() {
 
 // ── Panel image management ──
 function addPanelImage(stepId) {
-  _inlineImgTargetId = stepId;
-  _inlineImgTargetMode = 'panel'; // signal to save to images[]
-  if (!_inlineImgInput) {
-    _inlineImgInput = document.createElement('input');
-    _inlineImgInput.type = 'file';
-    _inlineImgInput.accept = 'image/*';
-    _inlineImgInput.style.display = 'none';
-    document.body.appendChild(_inlineImgInput);
-    _inlineImgInput.addEventListener('change', () => {
-      const file = _inlineImgInput.files[0];
-      if (file) readInlineImageFile(file, _inlineImgTargetId);
-      _inlineImgInput.value = '';
-    });
-  }
-  _inlineImgInput.click();
+  _openImageFilePicker(stepId, 'panel');
 }
 
 function deletePanelImage(stepId, ii) {
@@ -2069,8 +2056,10 @@ function bindPanelImageDropZone(stepId) {
     }
   });
   // Ctrl+V paste on panel zone (focused)
-  zone.addEventListener('focus', () => { _focusedImgZoneId = stepId; _inlineImgTargetMode = 'panel'; });
-  zone.addEventListener('blur', () => { setTimeout(() => { if(_focusedImgZoneId===stepId) _focusedImgZoneId=null; }, 500); });
+  zone.addEventListener('focus', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
+  zone.addEventListener('blur',  () => { setTimeout(() => { if (_focusedImgZoneId === stepId) { _focusedImgZoneId = null; _focusedImgZoneMode = null; } }, 500); });
+  // Click also sets focus state (since onclick=addPanelImage steals focus before paste can fire)
+  zone.addEventListener('mousedown', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
 }
 
 // ===== Trigger Inline Dropdown =====
@@ -2122,28 +2111,39 @@ function toggleTriggerDropdown(event, stepId) {
 }
 
 // ===== Inline Image Upload =====
-// Hidden file input reused across calls
-let _inlineImgInput = null;
 let _inlineImgTargetId = null;
+let _inlineImgTargetMode = 'preview'; // 'preview' | 'panel'
 
-function triggerInlineImageSelect(stepId) {
+/** 每次调用都创建全新的 file input，彻底避免 value 清空无效、change 不触发的问题 */
+function _openImageFilePicker(stepId, mode) {
   _inlineImgTargetId = stepId;
-  if (!_inlineImgInput) {
-    _inlineImgInput = document.createElement('input');
-    _inlineImgInput.type = 'file';
-    _inlineImgInput.accept = 'image/*';
-    _inlineImgInput.style.display = 'none';
-    document.body.appendChild(_inlineImgInput);
-    _inlineImgInput.addEventListener('change', () => {
-      const file = _inlineImgInput.files[0];
-      if (file) readInlineImageFile(file, _inlineImgTargetId);
-      _inlineImgInput.value = '';
-    });
-  }
-  _inlineImgInput.click();
+  _inlineImgTargetMode = mode;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (file) readInlineImageFile(file, _inlineImgTargetId);
+    if (document.body.contains(input)) document.body.removeChild(input);
+  });
+  // 用户取消选择时（focus 回到 window）也要销毁 input
+  window.addEventListener('focus', function onFocus() {
+    setTimeout(() => {
+      if (document.body.contains(input)) document.body.removeChild(input);
+    }, 500);
+    window.removeEventListener('focus', onFocus);
+  }, { once: true });
+
+  input.click();
 }
 
-let _inlineImgTargetMode = 'preview'; // 'preview' | 'panel'
+function triggerInlineImageSelect(stepId) {
+  _openImageFilePicker(stepId, 'preview');
+}
 
 function readInlineImageFile(file, stepId) {
   const reader = new FileReader();
@@ -2176,6 +2176,7 @@ function readInlineImageFile(file, stepId) {
 
 // Track which image zone is focused (for Ctrl+V)
 let _focusedImgZoneId = null;
+let _focusedImgZoneMode = null; // 'panel' | 'preview' | null
 
 // ── Image zone drag-drop: delegated on document (survives re-renders) ──
 let _imgDragTargetZone = null;
@@ -2228,15 +2229,17 @@ function bindInlineImageZones(container) {
       if (e.target.classList.contains('qt-img-replace-btn')) return;
       zone.focus();
       _focusedImgZoneId = stepId;
+      _focusedImgZoneMode = 'preview';
     });
 
     zone.addEventListener('focus', () => {
       _focusedImgZoneId = stepId;
+      _focusedImgZoneMode = 'preview';
       zone.classList.add('qt-img-focused');
     });
     zone.addEventListener('blur', () => {
       setTimeout(() => {
-        if (_focusedImgZoneId === stepId) _focusedImgZoneId = null;
+        if (_focusedImgZoneId === stepId) { _focusedImgZoneId = null; _focusedImgZoneMode = null; }
         zone.classList.remove('qt-img-focused');
       }, 500);
     });
@@ -2261,7 +2264,11 @@ document.addEventListener('paste', e => {
     if (item.type.startsWith('image/')) {
       e.preventDefault();
       const file = item.getAsFile();
-      if (file) readInlineImageFile(file, _focusedImgZoneId);
+      if (file) {
+        // Sync mode so readInlineImageFile knows where to save
+        _inlineImgTargetMode = _focusedImgZoneMode || 'preview';
+        readInlineImageFile(file, _focusedImgZoneId);
+      }
       break;
     }
   }
@@ -2428,7 +2435,7 @@ function renderTimelineLayout() {
   const descCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     return `<div class="tl-desc-cell" style="grid-column:${colIdx};grid-row:4">
-      ${step.desc ? `<div class="tl-desc">${esc(step.desc)}</div>` : ''}
+      ${step.desc ? `<div class="tl-desc">${escWithBr(step.desc)}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -2573,21 +2580,84 @@ function confirmImport() {
 }
 
 // ===== Export PNG =====
-async function exportPng() {
-  showToast('🖼️ 正在生成图片...');
-  const target = $previewCanvas.firstElementChild;
-  if (!target) { showToast('❌ 没有内容可导出'); return; }
+// ===== Export helpers =====
+/**
+ * 对目标节点截图。
+ * 做法：临时把 preview-area 和其滚动祖先的 overflow 解除，截完再还原，
+ * 避免 overflow:auto 截图偏移 和 flex height:100% 高度塌陷问题。
+ */
+async function _captureNode(target, scale) {
+  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
+    .backgroundColor || '#ffffff';
+
+  // 1. 收集并临时解除所有祖先和 target 内部的 overflow 限制
+  const overflowNodes = [];
+  // 祖先
+  let el = target.parentElement;
+  while (el && el !== document.body) {
+    const cs = getComputedStyle(el);
+    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+      overflowNodes.push({ el, overflow: el.style.overflow, overflowX: el.style.overflowX, overflowY: el.style.overflowY });
+      el.style.overflow = 'visible';
+      el.style.overflowX = 'visible';
+      el.style.overflowY = 'visible';
+    }
+    el = el.parentElement;
+  }
+  // target 自身及内部
+  [target, ...target.querySelectorAll('*')].forEach(node => {
+    const cs = getComputedStyle(node);
+    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+      overflowNodes.push({ el: node, overflow: node.style.overflow, overflowX: node.style.overflowX, overflowY: node.style.overflowY });
+      node.style.overflow  = 'visible';
+      node.style.overflowX = 'visible';
+      node.style.overflowY = 'visible';
+    }
+  });
+
+  // 2. 等一帧让浏览器重新计算布局
+  await new Promise(r => requestAnimationFrame(r));
+
+  const W = target.scrollWidth;
+  const H = target.scrollHeight;
+
   try {
     const canvas = await html2canvas(target, {
-      backgroundColor: getComputedStyle(document.getElementById('preview-area')).backgroundColor || '#13151c',
-      scale: 2,
+      backgroundColor: bgColor,
+      scale,
       useCORS: true,
       allowTaint: true,
-      scrollX: 0, scrollY: 0,
+      scrollX: -window.scrollX,
+      scrollY: -window.scrollY,
+      x: 0,
+      y: 0,
+      width:  W,
+      height: H,
+      windowWidth:  W,
+      windowHeight: H,
       logging: false,
     });
+    return canvas;
+  } finally {
+    // 3. 还原 overflow
+    overflowNodes.forEach(({ el, overflow, overflowX, overflowY }) => {
+      el.style.overflow  = overflow;
+      el.style.overflowX = overflowX;
+      el.style.overflowY = overflowY;
+    });
+  }
+}
+
+async function exportPng() {
+  showToast('🖼️ 正在生成图片...');
+  const previewCanvas = document.getElementById('preview-canvas');
+  const target = previewCanvas && previewCanvas.firstElementChild;
+  if (!target) { showToast('❌ 没有内容可导出'); return; }
+  const titleInput = document.getElementById('questTitle');
+  try {
+    const canvas = await _captureNode(target, 2);
     const link = document.createElement('a');
-    link.download = `QDD_${($questTitleInput.value || 'flow').replace(/\s+/g, '_')}.png`;
+    link.download = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
     showToast('✅ PNG 已导出');
@@ -2599,28 +2669,22 @@ async function exportPng() {
 // ===== Export PDF =====
 async function exportPdf() {
   showToast('📄 正在生成PDF...');
-  const target = $previewCanvas.firstElementChild;
+  const previewCanvas = document.getElementById('preview-canvas');
+  const target = previewCanvas && previewCanvas.firstElementChild;
   if (!target) { showToast('❌ 没有内容可导出'); return; }
+  const titleInput = document.getElementById('questTitle');
   try {
-    const canvas = await html2canvas(target, {
-      backgroundColor: getComputedStyle(document.getElementById('preview-area')).backgroundColor || '#13151c',
-      scale: 1.5,
-      useCORS: true,
-      allowTaint: true,
-      scrollX: 0, scrollY: 0,
-      logging: false,
-    });
+    const canvas = await _captureNode(target, 1.5);
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
     const { jsPDF } = window.jspdf;
     const pw = canvas.width;
     const ph = canvas.height;
-    // Landscape, custom size in mm (1px ~ 0.2646mm at 96dpi)
-    const scale = 0.264583;
-    const pdfW = pw * scale;
-    const pdfH = ph * scale;
+    const pdfScale = 0.264583;
+    const pdfW = pw * pdfScale;
+    const pdfH = ph * pdfScale;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pdfW, pdfH] });
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-    pdf.save(`QDD_${($questTitleInput.value || 'flow').replace(/\s+/g, '_')}.pdf`);
+    pdf.save(`QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`);
     showToast('✅ PDF 已导出');
   } catch (e) {
     showToast('❌ 导出失败：' + e.message);
@@ -2645,6 +2709,10 @@ function showToast(msg) {
 // ===== Helpers =====
 function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+/** 同 esc()，但将 \n 也转换为 <br>，用于在 innerHTML / contenteditable 中保留换行 */
+function escWithBr(str) {
+  return esc(str).replace(/\n/g, '<br>');
 }
 
 // ===== Inject static modal shells =====
