@@ -1,0 +1,760 @@
+<updated-code>// ===== Task Type Config =====
+const TASK_TYPES = [
+  { value: '',      label: '—（未设定）', color: null },
+  { value: 'PUZ',   label: 'PUZ 玩法',   color: '#7c6af7' }, // 紫
+  { value: 'BAT',   label: 'BAT 战斗',   color: '#06d6a0' }, // 绿
+  { value: 'NAV',   label: 'NAV 跑图',   color: '#ffd166' }, // 黄
+  { value: 'STORY', label: '剧情',        color: '#8e9aaf' }, // 灰
+];
+const TASK_TYPE_MAP = Object.fromEntries(TASK_TYPES.filter(t => t.value).map(t => [t.value, t]));
+
+const TRIGGER_OPTIONS = [
+  'Room触发',
+  '接续自动触发',
+  '剧情触发',
+  '玩家选择',
+  '接续',
+];
+
+// ===== Persistence =====
+const STORAGE_KEYS = {
+  layout:   'qdd_layout',
+  theme:    'qdd_theme',
+  colWidth: 'qdd_colwidth',
+  qdds:     'qdd_all_qdds',
+  lastQdd:  'qdd_last_id',
+  lastView: 'qdd_last_view', // 'home' | 'editor'
+};
+function loadPrefs() {
+  return {
+    layout:   localStorage.getItem(STORAGE_KEYS.layout)   || 'table',
+    theme:    localStorage.getItem(STORAGE_KEYS.theme)    || 'light',
+    colWidth: parseInt(localStorage.getItem(STORAGE_KEYS.colWidth) || '200', 10),
+    lastQdd:  localStorage.getItem(STORAGE_KEYS.lastQdd)  || null,
+    lastView: localStorage.getItem(STORAGE_KEYS.lastView) || 'home',
+  };
+}
+function savePrefs() {
+  localStorage.setItem(STORAGE_KEYS.layout,   STATE.layout);
+  localStorage.setItem(STORAGE_KEYS.theme,    STATE.theme);
+  localStorage.setItem(STORAGE_KEYS.colWidth, STATE.colWidth);
+  localStorage.setItem(STORAGE_KEYS.lastView, STATE.view);
+  if (STATE.currentQddId) {
+    localStorage.setItem(STORAGE_KEYS.lastQdd, STATE.currentQddId);
+  }
+}
+
+// ===== Multi-QDD Store =====
+function loadAllQdds() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.qdds);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+// ===== Undo / Redo History =====
+const HISTORY = {
+  stack: [],   // past snapshots (array of JSON strings)
+  future: [],  // redo stack
+  MAX: 50,
+  _skipNext: false, // flag to avoid recording during undo/redo itself
+};
+
+/** Call BEFORE any mutation to STATE.steps or STORE.qdds */
+function pushHistory() {
+  if (HISTORY._skipNext) return;
+  HISTORY.future = []; // clear redo on new action
+  const snap = JSON.stringify(STORE.qdds);
+  // Avoid pushing identical snapshots
+  if (HISTORY.stack.length > 0 && HISTORY.stack[HISTORY.stack.length - 1] === snap) return;
+  HISTORY.stack.push(snap);
+  if (HISTORY.stack.length > HISTORY.MAX) HISTORY.stack.shift();
+  updateUndoRedoUI();
+}
+
+function undoHistory() {
+  if (HISTORY.stack.length === 0) { showToast('没有可撤回的操作'); return; }
+  // Save current state to redo stack
+  HISTORY.future.push(JSON.stringify(STORE.qdds));
+  const snap = HISTORY.stack.pop();
+  HISTORY._skipNext = true;
+  restoreSnapshot(snap);
+  HISTORY._skipNext = false;
+  updateUndoRedoUI();
+  showToast('✓ 已撤回');
+}
+
+function redoHistory() {
+  if (HISTORY.future.length === 0) { showToast('没有可重做的操作'); return; }
+  HISTORY.stack.push(JSON.stringify(STORE.qdds));
+  const snap = HISTORY.future.pop();
+  HISTORY._skipNext = true;
+  restoreSnapshot(snap);
+  HISTORY._skipNext = false;
+  updateUndoRedoUI();
+  showToast('✓ 已重做');
+}
+
+function restoreSnapshot(snapJson) {
+  try {
+    STORE.qdds = JSON.parse(snapJson);
+    saveAllQdds();
+    // Re-sync STATE if we're in editor
+    if (STATE.currentQddId) {
+      const qdd = getCurrentQdd();
+      if (qdd) {
+        syncStateFromQdd(qdd);
+        renderAll();
+        // Re-open prop panel if a step was being edited
+        if (_propPanelStepId) {
+          const stillExists = STATE.steps.find(s => s.id === _propPanelStepId);
+          if (stillExists) renderStepPanel();
+          else closeStepPanel();
+        }
+      }
+    }
+  } catch(e) { console.error('Undo restore failed', e); }
+}
+
+function updateUndoRedoUI() {
+  const $undo = document.getElementById('undoBtn');
+  const $redo = document.getElementById('redoBtn');
+  if ($undo) $undo.disabled = HISTORY.stack.length === 0;
+  if ($redo) $redo.disabled = HISTORY.future.length === 0;
+  if ($undo) $undo.title = `撤回 (Ctrl+Z)  [${HISTORY.stack.length}步]`;
+  if ($redo) $redo.title = `重做 (Ctrl+Y)  [${HISTORY.future.length}步]`;
+}
+
+// Debounced history push: groups rapid consecutive edits into one undo step
+let _historyDebounceTimer = null;
+function scheduleHistoryPush() {
+  clearTimeout(_historyDebounceTimer);
+  _historyDebounceTimer = setTimeout(() => pushHistory(), 800);
+}
+
+function saveAllQdds() {
+  if (!HISTORY._skipNext) scheduleHistoryPush();
+  localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
+  if (STATE.currentQddId) {
+    localStorage.setItem(STORAGE_KEYS.lastQdd, STATE.currentQddId);
+  }
+  updateAutoSaveLabel();
+}
+function getCurrentQdd() {
+  return STORE.qdds.find(q => q.id === STATE.currentQddId) || null;
+}
+function syncStateFromQdd(qdd) {
+  STATE.steps      = qdd.steps;
+  STATE.questTitle = qdd.title;
+}
+function syncQddFromState(qdd) {
+  qdd.steps = STATE.steps;
+  qdd.title = STATE.questTitle;
+}
+
+// ===== State =====
+const STORE = { qdds: [] }; // all QDDs
+
+const STATE = {
+  steps: [],
+  activeStepId: null,
+  layout: 'table', // 'table' | 'timeline'
+  theme: 'light',
+  colWidth: 200, // timeline column width in px
+  questTitle: '主线任务 · 示例',
+  currentQddId: null, // null = on home page
+  editingStepId: null,
+  importData: null,
+  importHeaders: [],
+  view: 'home', // 'home' | 'editor'
+};
+
+const PRESET_COLORS = [
+  '#7c6af7','#4ecdc4','#ff6b6b','#ffd166',
+  '#06d6a0','#ef9a9a','#80cbc4','#ce93d8',
+  '#ffcc02','#4fc3f7','#ff9800','#a5d6a7',
+];
+
+function getStepColor(step, index) {
+  // If step has a taskType and no manual color override, use taskType color
+  if (step.taskType && TASK_TYPE_MAP[step.taskType]) {
+    return step.colorOverride || TASK_TYPE_MAP[step.taskType].color;
+  }
+  return step.color || PRESET_COLORS[index % PRESET_COLORS.length];
+}
+
+function genId() {
+  return 'step_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+}
+
+// ===== DOM Refs =====
+const $stepsList = document.getElementById('steps-list');
+const $previewCanvas = document.getElementById('preview-canvas');
+const $stepCount = document.getElementById('step-count');
+const $addStepBtn = document.getElementById('addStepBtn');
+const $layoutSelect = document.getElementById('layoutSelect');
+const $themeSelect = document.getElementById('themeSelect');
+const $questTitleInput = document.getElementById('questTitle');
+const $importFileInput = document.getElementById('importFile');
+const $exportPngBtn = document.getElementById('exportPngBtn');
+const $exportPdfBtn = document.getElementById('exportPdfBtn');
+
+// ===== Init =====
+function init() {
+  // Restore saved preferences (layout, theme, colWidth, lastView, lastQdd)
+  const prefs = loadPrefs();
+  STATE.layout   = prefs.layout;
+  STATE.theme    = prefs.theme;
+  STATE.colWidth = prefs.colWidth;
+
+  // Load all QDDs from localStorage
+  const saved = loadAllQdds();
+  if (saved && saved.length > 0) {
+    STORE.qdds = saved;
+  } else {
+    // First launch: create default QDD with sample data
+    const defaultQdd = { id: genId(), title: '主线任务 · 示例', steps: getSampleData() };
+    STORE.qdds = [defaultQdd];
+    saveAllQdds();
+  }
+
+  applyTheme(STATE.theme);
+  bindGlobalEvents();
+
+  // Restore last view: if user was in editor, reopen that QDD directly
+  if (prefs.lastView === 'editor' && prefs.lastQdd) {
+    const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
+    if (qdd) {
+      openQdd(qdd.id);
+      return;
+    }
+  }
+  showHomePage();
+}
+
+function getSampleData() {
+  return [
+    {
+      id: genId(), name: '0.任务接取', trigger: 'Room触发', location: '武康大楼·大厅',
+      characters: '柚柠, 程醒', desc: '柚柠和程醒到达大楼门口，感觉到有些许异常，任务提示被激活。决定一起调查周边情况。',
+      imageUrl: '', color: '#7c6af7', customFields: []
+    },
+    {
+      id: genId(), name: '1.武康大楼', trigger: '接续自动触发', location: '武康大楼一楼',
+      characters: '柚柠, 程醒', desc: '两人进入大楼一层，发现走廊灯光异常，地板上有奇怪的痕迹。沿着痕迹向内部深入探查。',
+      imageUrl: '', color: '#4ecdc4', customFields: []
+    },
+    {
+      id: genId(), name: '2.对话门卫', trigger: '剧情触发', location: '武康大楼·门卫室',
+      characters: '柚柠, 程醒', desc: '门卫神情紧张，透露了关于昨晚异常声音的信息，并建议他们不要深入地下层。',
+      imageUrl: '', color: '#ffd166', customFields: []
+    },
+    {
+      id: genId(), name: '3.伪装电工', trigger: '玩家选择', location: '武康大楼·后门',
+      characters: '柚柠', desc: '柚柠伪装成电工人员，成功混入内部。程醒在外接应，通过对讲机保持联系。',
+      imageUrl: '', color: '#ff6b6b', customFields: [{ key: 'PUZ类型', value: '伪装/潜行' }]
+    },
+    {
+      id: genId(), name: '4.楼道探索', trigger: '接续', location: '武康大楼·内部',
+      characters: '柚柠, 程醒', desc: '探索楼层内部，收集线索，发现了一张奇怪的地图和残缺的日记。',
+      imageUrl: '', color: '#06d6a0', customFields: [{ key: 'PUZ类型', value: '探索/解密' }]
+    },
+  ];
+}
+
+// ===== Global Events (bound once) =====
+function bindGlobalEvents() {
+  // Theme select (always in DOM)
+  const $themeSelect = document.getElementById('themeSelect');
+  if ($themeSelect) $themeSelect.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); });
+
+  // Close modals on backdrop click
+  document.getElementById('step-editor').addEventListener('click', e => {
+    if (e.target === document.getElementById('step-editor')) closeStepEditor();
+  });
+  document.getElementById('import-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('import-modal')) closeImportModal();
+  });
+
+  // Keyboard shortcuts: Undo / Redo
+  document.addEventListener('keydown', e => {
+    const inInput = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) ||
+      e.target.contentEditable === 'true';
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (inInput) return; // let browser handle native undo in inputs
+      e.preventDefault();
+      undoHistory();
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      if (inInput) return;
+      e.preventDefault();
+      redoHistory();
+    }
+    // Ctrl+S: manual save toast
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveAllQdds();
+      showToast('✓ 已保存');
+    }
+  });
+
+  // Auto-save every 30 seconds
+  setInterval(() => {
+    if (STATE.view === 'editor') {
+      const qdd = getCurrentQdd();
+      if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
+      // Also write autosave backup slot
+      const stamp = new Date().toISOString();
+      try {
+        localStorage.setItem('qdd_autosave', JSON.stringify({ ts: stamp, qdds: STORE.qdds }));
+      } catch(e) {}
+      updateAutoSaveLabel(stamp);
+    }
+  }, 30000);
+}
+
+function updateAutoSaveLabel(isoTs) {
+  const el = document.getElementById('autosave-label');
+  if (!el) return;
+  if (isoTs) {
+    const d = new Date(isoTs);
+    el.textContent = `自动保存 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+// ===== Editor page events (re-bound each time editor page is shown) =====
+function bindEditorEvents() {
+  const $addStepBtn    = document.getElementById('addStepBtn');
+  const $layoutSelect  = document.getElementById('layoutSelect');
+  const $questTitleInput = document.getElementById('questTitle');
+  const $importFileInput = document.getElementById('importFile');
+  const $exportPngBtn  = document.getElementById('exportPngBtn');
+  const $exportPdfBtn  = document.getElementById('exportPdfBtn');
+  const $backBtn       = document.getElementById('backToHomeBtn');
+  const $slider        = document.getElementById('colWidthSlider');
+  const $label         = document.getElementById('colWidthVal');
+
+  if ($addStepBtn)    $addStepBtn.addEventListener('click', () => openStepEditor(null));
+  if ($layoutSelect)  {
+    $layoutSelect.value = STATE.layout;
+    $layoutSelect.addEventListener('change', e => { STATE.layout = e.target.value; savePrefs(); renderPreview(); });
+  }
+  if ($questTitleInput) {
+    $questTitleInput.value = STATE.questTitle;
+    $questTitleInput.addEventListener('input', e => {
+      STATE.questTitle = e.target.value;
+      const qdd = getCurrentQdd();
+      if (qdd) { qdd.title = e.target.value; saveAllQdds(); }
+      renderPreview();
+    });
+  }
+  if ($importFileInput) $importFileInput.addEventListener('change', handleImportFile);
+  if ($exportPngBtn)    $exportPngBtn.addEventListener('click', exportPng);
+  if ($exportPdfBtn)    $exportPdfBtn.addEventListener('click', exportPdf);
+  if ($backBtn) $backBtn.addEventListener('click', showHomePage);
+  if ($slider) {
+    $slider.value = STATE.colWidth;
+    if ($label) $label.textContent = STATE.colWidth;
+    $slider.addEventListener('input', e => {
+      STATE.colWidth = parseInt(e.target.value, 10);
+      if ($label) $label.textContent = STATE.colWidth;
+      savePrefs();
+      renderPreview();
+    });
+  }
+  // Sync theme select
+  const $ts = document.getElementById('themeSelect');
+  if ($ts) $ts.value = STATE.theme;
+
+  // Undo / Redo buttons
+  const $undoBtn = document.getElementById('undoBtn');
+  const $redoBtn = document.getElementById('redoBtn');
+  if ($undoBtn) $undoBtn.addEventListener('click', undoHistory);
+  if ($redoBtn) $redoBtn.addEventListener('click', redoHistory);
+  updateUndoRedoUI();
+
+  // Backup JSON
+  const $backupBtn = document.getElementById('backupJsonBtn');
+  if ($backupBtn) $backupBtn.addEventListener('click', exportBackupJson);
+
+  // Restore JSON
+  const $restoreInput = document.getElementById('restoreJsonFile');
+  if ($restoreInput) $restoreInput.addEventListener('change', handleRestoreJson);
+
+  // AI Import Panel
+  const $aiImportBtn = document.getElementById('aiImportBtn');
+  if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
+}
+
+const THEME_ICONS = { light: '☀️', dark: '🌙', cyber: '💜' };
+
+function applyTheme(theme) {
+  STATE.theme = theme;
+  document.body.className = `theme-${theme}`;
+  // Update theme icon in toolbar if present
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.textContent = THEME_ICONS[theme] || '🎨';
+  // Keep select in sync
+  const sel = document.getElementById('themeSelect');
+  if (sel) sel.value = theme;
+}
+
+// ===== AI Import Panel =====
+const AI_PROMPT_TEMPLATE = `你是一个游戏策划助理，我需要你帮我把剧情大纲整理成 QDD Flow 工具可以直接导入的 JSON 格式。
+
+【输出格式规范】
+
+输出一个合法的 JSON 对象（单个 QDD），结构如下：
+
+{
+  "title": "QDD名称（任务线名称）",
+  "steps": [
+    {
+      "name": "0.环节名称",
+      "taskType": "STORY",
+      "trigger": "Room触发",
+      "location": "场景名称",
+      "characters": "NPC名称，用逗号分隔",
+      "desc": "这个环节的详细描述，包括玩家要做什么、剧情内容摘要等。",
+      "images": [],
+      "customFields": [
+        { "key": "自定义字段名", "value": "字段内容" }
+      ]
+    }
+  ]
+}
+
+【字段说明】
+
+▌ title（必填）：整条任务线的名称，如"第一章·武康大楼"
+
+▌ steps（必填）：环节数组，每个环节包含以下字段：
+
+  • name（必填）：环节编号+名称，建议格式 "0.环节名"，如 "0.任务接取"
+  
+  • taskType（必填）：任务类型，只能是以下四个值之一：
+      - "PUZ"   玩法环节（解谜、潜行、互动等）
+      - "BAT"   战斗环节
+      - "NAV"   跑图/导航环节（纯移动、探索地图）
+      - "STORY" 剧情环节（对话、过场动画、timeline）
+      - ""      （空字符串）表示未分类
+      
+  • trigger（可选）：触发方式，建议从以下选项选取（也可自定义）：
+      "Room触发" / "接续自动触发" / "剧情触发" / "玩家选择" / "接续"
+      
+  • location（可选）：发生地点/场景名称，如 "武康大楼·大厅"
+  
+  • characters（可选）：涉及的角色/NPC，多个用逗号分隔，如 "门卫张三, 主角"
+  
+  • desc（可选但重要）：环节描述，说明玩家行为、剧情内容、设计意图等，可多行
+  
+  • images（可选）：留空数组 [] 即可，图片通过工具手动上传
+  
+  • customFields（可选）：自定义参数数组，每项格式 {"key":"字段名","value":"内容"}
+      常用示例：
+      - PUZ类型的玩法：{"key":"玩法类型","value":"解谜/潜行"}
+      - BAT类型的怪物：{"key":"敌人","value":"普通士兵×3"}
+      - 奖励内容：{"key":"奖励","value":"道具·钥匙"}
+      - 分支选项：{"key":"分支","value":"A.选择合作 / B.选择对抗"}
+
+【注意事项】
+
+1. 只输出 JSON，不要有任何额外的解释文字（可以在 JSON 前后用代码块包裹）
+2. 所有字符串值不能包含未转义的引号
+3. desc 字段中的换行用 \\n 表示
+4. 不需要填写 id、color、imageUrl、colorOverride 等字段，工具会自动生成
+5. 按流程顺序排列 steps，编号从 0 开始
+
+【示例输出】
+
+\`\`\`json
+{
+  "title": "第一章·武康大楼",
+  "steps": [
+    {
+      "name": "0.任务接取",
+      "taskType": "STORY",
+      "trigger": "Room触发",
+      "location": "武康大楼·大厅",
+      "characters": "神秘人",
+      "desc": "玩家进入武康大楼大厅，触发过场动画。神秘人出现并委托玩家寻找失踪的档案。",
+      "images": [],
+      "customFields": []
+    },
+    {
+      "name": "1.大厅探索",
+      "taskType": "NAV",
+      "trigger": "接续自动触发",
+      "location": "武康大楼·一楼",
+      "characters": "",
+      "desc": "玩家在大厅自由探索，可与门卫对话获取线索，发现后门入口。",
+      "images": [],
+      "customFields": [
+        { "key": "可交互物件", "value": "公告栏、电话亭、前台电脑" }
+      ]
+    },
+    {
+      "name": "2.伪装电工",
+      "taskType": "PUZ",
+      "trigger": "玩家选择",
+      "location": "武康大楼·后门",
+      "characters": "门卫李四",
+      "desc": "玩家需要找到电工服并伪装成维修人员，通过门卫的检查进入内部。\\n失败惩罚：重新开始潜行。",
+      "images": [],
+      "customFields": [
+        { "key": "玩法类型", "value": "伪装/潜行" },
+        { "key": "通关条件", "value": "成功骗过门卫" }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+---
+现在请根据我提供的内容，按上述格式输出 QDD JSON：
+
+[在这里粘贴你的剧情大纲、任务设计文档等内容]`;
+
+function openAiImportPanel() {
+  // Create overlay if not exist
+  let overlay = document.getElementById('ai-import-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'ai-import-overlay';
+    overlay.className = 'ai-import-overlay';
+    overlay.innerHTML = `
+      <div class="ai-import-panel">
+        <div class="ai-import-header">
+          <div class="ai-import-title">
+            <span>🤖 AI 导入助手</span>
+            <small>复制提示词 → 发给AI → 粘贴JSON → 导入</small>
+          </div>
+          <button class="ai-import-close" onclick="closeAiImportPanel()">×</button>
+        </div>
+        <div class="ai-import-body">
+          <!-- Left: Prompt -->
+          <div class="ai-import-col">
+            <div class="ai-col-header">
+              <span>① 复制提示词，发给 AI</span>
+              <button class="ai-copy-btn" onclick="copyAiPrompt()">📋 复制全部</button>
+            </div>
+            <pre class="ai-prompt-pre" id="ai-prompt-content">${escHtml(AI_PROMPT_TEMPLATE)}</pre>
+          </div>
+          <!-- Right: JSON Import -->
+          <div class="ai-import-col">
+            <div class="ai-col-header">
+              <span>② 粘贴 AI 输出的 JSON，点击导入</span>
+              <div class="ai-import-mode-row">
+                <label><input type="radio" name="ai-import-mode" value="add" checked> 追加到当前 QDD</label>
+                <label><input type="radio" name="ai-import-mode" value="new"> 创建为新 QDD</label>
+              </div>
+            </div>
+            <textarea class="ai-json-input" id="ai-json-input" placeholder='粘贴 AI 输出的 JSON 到这里...\n\n支持格式：\n• 单个 QDD 对象：{ "title": "...", "steps": [...] }\n• 多个 QDD 数组：[{ "title": "...", "steps": [...] }, ...]'></textarea>
+            <div class="ai-import-actions">
+              <button class="ai-validate-btn" onclick="validateAiJson()">🔍 验证格式</button>
+              <button class="ai-do-import-btn" onclick="doAiImport()">⬇️ 导入</button>
+            </div>
+            <div class="ai-import-feedback" id="ai-import-feedback"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeAiImportPanel(); });
+  }
+  overlay.classList.add('visible');
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function closeAiImportPanel() {
+  const overlay = document.getElementById('ai-import-overlay');
+  if (overlay) overlay.classList.remove('visible');
+}
+
+function copyAiPrompt() {
+  navigator.clipboard.writeText(AI_PROMPT_TEMPLATE).then(() => {
+    const btn = document.querySelector('.ai-copy-btn');
+    if (btn) { btn.textContent = '✓ 已复制！'; setTimeout(() => { btn.textContent = '📋 复制全部'; }, 2000); }
+  }).catch(() => {
+    // Fallback
+    const el = document.createElement('textarea');
+    el.value = AI_PROMPT_TEMPLATE;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('提示词已复制');
+  });
+}
+
+function parseAiJsonInput() {
+  const raw = document.getElementById('ai-json-input')?.value?.trim() || '';
+  if (!raw) return { error: '请先粘贴 AI 输出的 JSON' };
+
+  // Strip markdown code block if present
+  let cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
+  let parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch (e) { return { error: `JSON 解析失败：${e.message}` }; }
+
+  // Normalize to array of QDDs
+  let qdds = [];
+  if (Array.isArray(parsed)) {
+    qdds = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    // Could be a single QDD or a full backup {qdds:[...]}
+    if (parsed.qdds && Array.isArray(parsed.qdds)) {
+      qdds = parsed.qdds;
+    } else if (parsed.steps || parsed.title) {
+      qdds = [parsed];
+    } else {
+      return { error: '格式不识别：需要包含 "title" 和 "steps" 字段' };
+    }
+  } else {
+    return { error: '格式不识别：需要 JSON 对象或数组' };
+  }
+
+  // Validate each QDD has steps array
+  for (const q of qdds) {
+    if (!Array.isArray(q.steps)) return { error: `QDD "${q.title||'未命名'}" 缺少 steps 数组` };
+  }
+
+  return { qdds };
+}
+
+function setAiFeedback(msg, isError) {
+  const el = document.getElementById('ai-import-feedback');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'ai-import-feedback ' + (isError ? 'ai-feedback-error' : 'ai-feedback-ok');
+}
+
+function validateAiJson() {
+  const result = parseAiJsonInput();
+  if (result.error) {
+    setAiFeedback('❌ ' + result.error, true);
+  } else {
+    const totalSteps = result.qdds.reduce((s, q) => s + (q.steps?.length || 0), 0);
+    setAiFeedback(`✅ 格式正确：${result.qdds.length} 个 QDD，共 ${totalSteps} 个环节，可以导入`, false);
+  }
+}
+
+function doAiImport() {
+  const result = parseAiJsonInput();
+  if (result.error) { setAiFeedback('❌ ' + result.error, true); return; }
+
+  const mode = document.querySelector('input[name="ai-import-mode"]:checked')?.value || 'new';
+  const { qdds } = result;
+
+  pushHistory();
+
+  if (mode === 'add') {
+    // Append steps from first QDD into current QDD
+    const currentQdd = getCurrentQdd();
+    if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
+    const srcQdd = qdds[0];
+    const newSteps = (srcQdd.steps || []).map(s => normalizeAiStep(s));
+    currentQdd.steps.push(...newSteps);
+    syncStateFromQdd(currentQdd);
+    saveAllQdds();
+    renderAll();
+    setAiFeedback(`✅ 已追加 ${newSteps.length} 个环节到当前 QDD`, false);
+    showToast(`已追加 ${newSteps.length} 个环节`);
+  } else {
+    // Create new QDD(s)
+    for (const raw of qdds) {
+      const newQdd = {
+        id: genId(),
+        title: raw.title || '从AI导入',
+        steps: (raw.steps || []).map(s => normalizeAiStep(s)),
+      };
+      STORE.qdds.push(newQdd);
+    }
+    saveAllQdds();
+    // Switch to home to show the new QDDs
+    STATE.currentView = 'home';
+    renderApp();
+    setAiFeedback(`✅ 已创建 ${qdds.length} 个新 QDD`, false);
+    showToast(`已导入 ${qdds.length} 个 QDD`);
+    closeAiImportPanel();
+  }
+}
+
+function normalizeAiStep(raw) {
+  return {
+    id:           genId(),
+    name:         raw.name         || '未命名环节',
+    taskType:     raw.taskType     || '',
+    trigger:      raw.trigger      || '',
+    location:     raw.location     || '',
+    characters:   raw.characters   || '',
+    desc:         raw.desc         || '',
+    images:       Array.isArray(raw.images) ? raw.images : [],
+    imageUrl:     raw.imageUrl     || '',
+    color:        raw.color        || '',
+    colorOverride:raw.colorOverride|| '',
+    customFields: Array.isArray(raw.customFields)
+      ? raw.customFields.map(f => ({ key: f.key || '', value: f.value || '' }))
+      : [],
+  };
+}
+
+// ===== JSON Backup / Restore =====
+function exportBackupJson() {
+  // Sync current state before export
+  const qdd = getCurrentQdd();
+  if (qdd) syncQddFromState(qdd);
+
+  const payload = {
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    qdds: STORE.qdds,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const ts   = new Date().toISOString().slice(0,16).replace(/[T:]/g, '-');
+  a.href     = url;
+  a.download = `QDDFlow_backup_${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ 备份已导出');
+}
+
+function handleRestoreJson(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const payload = JSON.parse(ev.target.result);
+      const qdds = payload.qdds || payload; // support both wrapped and raw array
+      if (!Array.isArray(qdds)) throw new Error('格式不对');
+      if (!confirm(`确认用备份文件覆盖当前所有 QDD 数据？（共 ${qdds.length} 个 QDD）\n此操作不可撤销。`)) return;
+      // Push current state to history before overwriting
+      pushHistory();
+      STORE.qdds = qdds;
+      saveAllQdds();
+      showToast(`✓ 已恢复 ${qdds.length} 个 QDD`);
+      // Go back to home to re-select
+      showHomePage();
+    } catch(err) {
+      alert('读取备份失败：' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // reset for re-select
+}
+
+// ===== View: Home Page =====
+function showHomePage() {
+  // Save current QDD state before leaving editor
+  if (STATE.currentQddId) {
+    const qdd = getCurrentQdd();
+    if (qdd) syncQddFromState(qdd
