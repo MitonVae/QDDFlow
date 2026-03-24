@@ -1473,7 +1473,7 @@ function copyTableToClipboard() {
     });
   });
 
-  // Field rows to generate (label + getter)
+  // All possible field defs (label + getter)
   const fieldDefs = [
     { label: '触发方式', get: s => s.trigger || '' },
     { label: '位置',     get: s => s.location || '' },
@@ -1484,80 +1484,74 @@ function copyTableToClipboard() {
     })),
   ];
 
-  // Helper: escape HTML
+  // Helper: escape HTML special chars
   const h = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  // Helper: hex color to rgba with alpha for background
+  // Helper: hex → rgba
   const hexToRgba = (hex, alpha) => {
     const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return `rgba(${r},${g},${b},${alpha})`;
   };
 
-  // Each step occupies 2 columns: [label col | value col]
-  // Total columns = steps.length * 2
-  const totalCols = steps.length * 2;
+  // ── Styles ──
+  const baseStyle  = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;border-collapse:collapse;`;
+  const cellBorder = `border:1px solid #bbb;`;
+  const labelStyle = `${cellBorder}padding:4px 6px;background:#f0f0f0;color:#444;font-weight:600;white-space:nowrap;vertical-align:middle;width:56px;`;
+  const valStyle   = `${cellBorder}padding:4px 7px;vertical-align:middle;word-break:break-word;`;
+  const descStyle  = `${cellBorder}padding:6px 8px;vertical-align:top;word-break:break-word;font-size:11px;color:#222;line-height:1.6;`;
+  const imgCellStyle = `${cellBorder}padding:6px;text-align:center;vertical-align:middle;`;
 
-  // ── Base styles ──
-  const baseStyle = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;border-collapse:collapse;`;
-  const cellBorder = `border:1px solid #aaa;`;
-  const labelStyle = `${cellBorder}padding:3px 5px;background:#f5f5f5;color:#444;font-weight:600;white-space:nowrap;vertical-align:top;width:52px;`;
-  const valStyle   = `${cellBorder}padding:3px 6px;vertical-align:top;word-break:break-word;`;
-  const descStyle  = `${cellBorder}padding:5px 6px;vertical-align:top;word-break:break-word;font-size:10px;color:#333;`;
-
-  // ── Row 1: image row ──
-  // Each step's image(s) merged across 2 cols
-  const imgCells = steps.map(step => {
+  // ── Row 1: image row — colspan=2 per step ──
+  const imgCells = steps.map((step, i) => {
     const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
-    const color = getStepColor(step, steps.indexOf(step));
+    const color = getStepColor(step, i);
+    const bg = hexToRgba(color, 0.07);
     const imgContent = imgs.length > 0
-      ? imgs.map(url => `<img src="${h(url)}" style="max-width:120px;max-height:90px;display:block;margin:0 auto 2px;">`).join('')
-      : `<div style="width:120px;height:80px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;">无图</div>`;
-    return `<td colspan="2" style="${cellBorder}padding:4px;text-align:center;background:${hexToRgba(color,0.08)};">${imgContent}</td>`;
+      ? imgs.map(url => `<img src="${h(url)}" style="max-width:140px;max-height:100px;display:inline-block;margin:2px;vertical-align:middle;">`).join('')
+      : `<span style="font-size:11px;color:#aaa;">🖼 在属性面板添加配图</span>`;
+    return `<td colspan="2" style="${imgCellStyle}background:${bg};height:80px;">${imgContent}</td>`;
   }).join('');
   const row1 = `<tr>${imgCells}</tr>`;
 
-  // ── Row 2: colored title header ──
+  // ── Row 2: colored title header — name + type badge on new line, colspan=2 ──
   const titleCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
     const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    const typeBadge = typeInfo
-      ? `<span style="display:inline-block;margin-left:4px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.3);color:#fff;">${h(typeInfo.label)}</span>`
+    // Type badge: dark pill on new line, centered
+    const typeLine = typeInfo
+      ? `<div style="margin-top:4px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.35);color:#fff;letter-spacing:0.5px;">${h(typeInfo.value)}</span></div>`
       : '';
-    return `<td colspan="2" style="${cellBorder}padding:6px 8px;background:${color};color:#fff;font-weight:700;font-size:12px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);">
-      ${h(step.name || '未命名环节')}${typeBadge}
-    </td>`;
+    return `<td colspan="2" style="${cellBorder}padding:8px 6px 7px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1.3;">${h(step.name || '未命名环节')}${typeLine}</td>`;
   }).join('');
   const row2 = `<tr>${titleCells}</tr>`;
 
-  // ── Field rows ──
+  // ── Field rows — only render rows where at least one step has a value ──
   const fieldRows = fieldDefs.map(fd => {
+    // Check if any step has a non-empty value for this field
+    const hasAny = steps.some(s => fd.get(s).trim() !== '');
+    if (!hasAny) return ''; // skip entirely if all empty
     const cells = steps.map((step, i) => {
       const color = getStepColor(step, i);
-      const val = fd.get(step);
+      const val = fd.get(step).trim();
       return `<td style="${labelStyle}">${h(fd.label)}：</td>` +
-             `<td style="${valStyle}background:${hexToRgba(color,0.04)};">${h(val || '—')}</td>`;
+             `<td style="${valStyle}background:${hexToRgba(color,0.05)};">${val ? h(val) : '<span style="color:#bbb;">—</span>'}</td>`;
     }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
 
-  // ── Description row ──
-  const descCells = steps.map((step, i) => {
-    const color = getStepColor(step, i);
-    const desc = (step.desc || '').replace(/\n/g, '<br>');
-    return `<td colspan="2" style="${descStyle}background:${hexToRgba(color,0.04)};">${desc}</td>`;
-  }).join('');
-  const descRow = `<tr>${descCells}</tr>`;
+  // ── Description row — colspan=2, only show if any desc exists ──
+  const hasAnyDesc = steps.some(s => (s.desc || '').trim() !== '');
+  const descRow = hasAnyDesc ? (() => {
+    const descCells = steps.map((step, i) => {
+      const color = getStepColor(step, i);
+      const desc = (step.desc || '').trim().replace(/\n/g, '<br>');
+      return `<td colspan="2" style="${descStyle}background:${hexToRgba(color,0.05)};">${desc || ''}</td>`;
+    }).join('');
+    return `<tr>${descCells}</tr>`;
+  })() : '';
 
-  // ── Assemble full HTML table ──
-  const tableHtml = `
-<table style="${baseStyle}" cellspacing="0" cellpadding="0">
-  <tbody>
-    ${row1}
-    ${row2}
-    ${fieldRows}
-    ${descRow}
-  </tbody>
-</table>`;
+  // ── Assemble ──
+  const tableHtml = `<table style="${baseStyle}" cellspacing="0" cellpadding="0"><tbody>${row1}${row2}${fieldRows}${descRow}</tbody></table>`;
 
   // Write both HTML and plain-text to clipboard
   const plainText = steps.map(s => {
