@@ -1269,12 +1269,43 @@ body.theme-dark .tl-note {
 }
 
 .table-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 12px;
   padding-left: 2px;
   letter-spacing: 0.5px;
+}
+
+.table-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.table-copy-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.table-copy-btn:active {
+  transform: scale(0.96);
 }
 
 /* ── Table scroll wrapper ── */
@@ -1907,24 +1938,25 @@ body.theme-dark .tl-note {
 
 /* ===== Step Property Panel (Drawer) ===== */
 .prop-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
   width: 300px;
+  min-width: 300px;
   height: 100%;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
-  box-shadow: -4px 0 18px rgba(0, 0, 0, 0.13);
-  z-index: 50;
   display: flex;
   flex-direction: column;
-  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: translateX(0);
+  flex-shrink: 0;
   overflow: hidden;
+  transition: min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.22s;
+  opacity: 1;
 }
 
 .prop-panel-hidden {
-  transform: translateX(105%);
+  width: 0;
+  min-width: 0;
+  opacity: 0;
   pointer-events: none;
 }
 

@@ -927,17 +927,17 @@ function buildEditorPageHTML() {
         <div id="preview-scroll-wrap">
           <div id="preview-canvas"></div>
         </div>
-        <!-- Step Property Panel (drawer) -->
-        <div id="step-prop-panel" class="prop-panel prop-panel-hidden">
-          <div class="prop-panel-header">
-            <span class="prop-panel-title" id="prop-panel-title">环节属性</span>
-            <button class="prop-panel-close" onclick="closeStepPanel()" title="关闭">×</button>
-          </div>
-          <div class="prop-panel-body" id="prop-panel-body">
-            <!-- filled by renderStepPanel() -->
-          </div>
-        </div>
       </main>
+      <!-- Step Property Panel: fixed right column -->
+      <div id="step-prop-panel" class="prop-panel prop-panel-hidden">
+        <div class="prop-panel-header">
+          <span class="prop-panel-title" id="prop-panel-title">环节属性</span>
+          <button class="prop-panel-close" onclick="closeStepPanel()" title="关闭">×</button>
+        </div>
+        <div class="prop-panel-body" id="prop-panel-body">
+          <!-- filled by renderStepPanel() -->
+        </div>
+      </div>
     </div>
   `;
 }
@@ -1435,7 +1435,10 @@ function renderTableLayout() {
 
   $previewCanvas.innerHTML = `
     <div class="table-wrap">
-      <div class="table-title-bar">${esc(title)}</div>
+      <div class="table-title-bar">
+        ${esc(title)}
+        <button class="table-copy-btn" onclick="copyTableToClipboard()" title="复制整张表，可直接粘贴到 Excel / 飞书表格">📋 复制到表格</button>
+      </div>
       <div class="qt-scroll">
         <table class="qt-table" cellspacing="0" cellpadding="0">
           <tbody><tr>${stepCells}</tr></tbody>
@@ -1455,6 +1458,63 @@ function renderTableLayout() {
 
   // Bind inline image drop zones
   bindInlineImageZones($previewCanvas);
+}
+
+// ===== Copy Table to Clipboard =====
+function copyTableToClipboard() {
+  const title = STATE.questTitle || '';
+  const steps = STATE.steps;
+  if (!steps.length) { showToast('⚠️ 没有环节可复制'); return; }
+
+  // Collect all custom field keys across all steps
+  const customKeys = [];
+  steps.forEach(s => {
+    (s.customFields || []).forEach(f => {
+      if (f.key && !customKeys.includes(f.key)) customKeys.push(f.key);
+    });
+  });
+
+  // Row definitions (same order as table)
+  const rowDefs = [
+    { label: '环节名称',  get: s => s.name || '' },
+    { label: '任务类型',  get: s => s.taskType ? (TASK_TYPE_MAP[s.taskType]?.label || s.taskType) : '' },
+    { label: '触发方式',  get: s => s.trigger || '' },
+    { label: '位置',      get: s => s.location || '' },
+    { label: '出场人物',  get: s => s.characters || '' },
+    ...customKeys.map(k => ({
+      label: k,
+      get: s => {
+        const cf = (s.customFields || []).find(f => f.key === k);
+        return cf ? (cf.value || '') : '';
+      }
+    })),
+    { label: '描述/备注', get: s => s.desc || '' },
+  ];
+
+  // Build TSV: first row = header (step names), subsequent rows = field values
+  // Format: first col = row label, then one col per step
+  const headerRow = ['字段 \\ 环节', ...steps.map(s => s.name || '未命名环节')].join('\t');
+  const dataRows = rowDefs.map(rd => {
+    const cells = [rd.label, ...steps.map(s => rd.get(s).replace(/\t/g, ' ').replace(/\n/g, ' '))];
+    return cells.join('\t');
+  });
+
+  const tsv = [headerRow, ...dataRows].join('\n');
+
+  navigator.clipboard.writeText(tsv).then(() => {
+    showToast('✅ 已复制！可直接粘贴到 Excel / 飞书表格');
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = tsv;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✅ 已复制！可直接粘贴到 Excel / 飞书表格');
+  });
 }
 
 function onTableCellBlur(e) {
