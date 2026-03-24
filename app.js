@@ -230,6 +230,7 @@ function init() {
     }
   }
   showHomePage();
+  _initImageZoneDelegation(); // register once, survives all re-renders
 }
 
 function getSampleData() {
@@ -2176,14 +2177,54 @@ function readInlineImageFile(file, stepId) {
 // Track which image zone is focused (for Ctrl+V)
 let _focusedImgZoneId = null;
 
+// ── Image zone drag-drop: delegated on document (survives re-renders) ──
+let _imgDragTargetZone = null;
+
+function _initImageZoneDelegation() {
+  document.addEventListener('dragover', e => {
+    const zone = e.target.closest('.qt-img-multi-wrap');
+    if (!zone) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (_imgDragTargetZone !== zone) {
+      if (_imgDragTargetZone) _imgDragTargetZone.classList.remove('qt-img-drop-hover');
+      _imgDragTargetZone = zone;
+      zone.classList.add('qt-img-drop-hover');
+    }
+  });
+
+  document.addEventListener('dragleave', e => {
+    const zone = e.target.closest('.qt-img-multi-wrap');
+    if (!zone || zone !== _imgDragTargetZone) return;
+    // Only clear if leaving the zone entirely (relatedTarget is outside)
+    if (!zone.contains(e.relatedTarget)) {
+      zone.classList.remove('qt-img-drop-hover');
+      _imgDragTargetZone = null;
+    }
+  });
+
+  document.addEventListener('drop', e => {
+    const zone = e.target.closest('.qt-img-multi-wrap');
+    if (!zone) return;
+    e.preventDefault();
+    zone.classList.remove('qt-img-drop-hover');
+    _imgDragTargetZone = null;
+    const stepId = zone.dataset.stepId;
+    if (!stepId) return;
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      readInlineImageFile(file, stepId);
+    }
+  });
+}
+
 function bindInlineImageZones(container) {
   container.querySelectorAll('.qt-img-zone').forEach(zone => {
     const stepId = zone.dataset.stepId;
     if (!stepId) return;
 
-    // Single click → focus (no file dialog)
+    // Single click → focus (for Ctrl+V paste)
     zone.addEventListener('click', e => {
-      // Prevent clicks on the replace button from stealing focus
       if (e.target.classList.contains('qt-img-replace-btn')) return;
       zone.focus();
       _focusedImgZoneId = stepId;
@@ -2194,7 +2235,6 @@ function bindInlineImageZones(container) {
       zone.classList.add('qt-img-focused');
     });
     zone.addEventListener('blur', () => {
-      // Longer delay: paste event fires AFTER blur, need time for it to complete
       setTimeout(() => {
         if (_focusedImgZoneId === stepId) _focusedImgZoneId = null;
         zone.classList.remove('qt-img-focused');
@@ -2207,23 +2247,6 @@ function bindInlineImageZones(container) {
       if (zone.classList.contains('qt-img-has-img')) {
         const imgEl = zone.querySelector('img');
         if (imgEl) openImagePreview(imgEl.src);
-      }
-    });
-
-    // Drag & drop
-    zone.addEventListener('dragover', e => {
-      e.preventDefault();
-      zone.classList.add('qt-img-drop-hover');
-    });
-    zone.addEventListener('dragleave', () => {
-      zone.classList.remove('qt-img-drop-hover');
-    });
-    zone.addEventListener('drop', e => {
-      e.preventDefault();
-      zone.classList.remove('qt-img-drop-hover');
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith('image/')) {
-        readInlineImageFile(file, stepId);
       }
     });
   });
