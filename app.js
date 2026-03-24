@@ -1664,6 +1664,10 @@ function onTableCellBlur(e) {
   }
   // Update quest title display if name changed
   if (field === 'name') renderStepsList();
+
+  // ── Persist: sync back to STORE and save to localStorage ──
+  const qdd = getCurrentQdd();
+  if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
 }
 
 // ===== Step Property Panel =====
