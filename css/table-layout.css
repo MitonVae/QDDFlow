@@ -1,0 +1,520 @@
+﻿/* ===== TABLE LAYOUT ===== */
+.table-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+}
+
+.table-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-left: 2px;
+  letter-spacing: 0.5px;
+}
+
+.table-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.table-copy-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.table-copy-btn:active {
+  transform: scale(0.96);
+}
+
+/* 鈹€鈹€ Table scroll wrapper 鈹€鈹€ */
+.qt-scroll {
+  overflow-x: auto;
+}
+
+/* 鈹€鈹€ Outer table: one <td> per step, side by side 鈹€鈹€ */
+.qt-table {
+  border-collapse: collapse;
+  border: 1px solid #000;
+  box-shadow: var(--shadow);
+  background: var(--bg-panel);
+  min-width: max-content;
+  table-layout: auto;
+}
+
+.qt-table > tbody > tr > td {
+  border: 1px solid #000;
+  padding: 0;
+  vertical-align: top;
+}
+
+/* 鈹€鈹€ Step column cell 鈹€鈹€ */
+.qt-step-cell {
+  min-width: 200px;
+  width: 240px;
+  background: var(--bg-panel);
+  vertical-align: top;
+}
+
+/* Inner flex wrapper (keeps <td> as table-cell, flex lives inside) */
+.qt-step-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 鈹€鈹€ Colored title header 鈹€鈹€ */
+.qt-col-header {
+  padding: 10px 12px 8px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  line-height: 1.4;
+  border-bottom: 1px solid #000;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.qt-col-header:hover {
+  filter: brightness(1.08);
+}
+
+.qt-col-header [contenteditable] {
+  outline: none;
+  display: block;
+  color: #fff;
+  text-align: center;
+  width: 100%;
+  word-break: break-word;
+}
+
+.qt-col-header [contenteditable]:focus {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+/* 鈹€鈹€ Task Type Badge (inline in header) 鈹€鈹€ */
+.qt-type-badge {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.qt-type-badge:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* Table header inner layout: title centered, badge below center */
+.qt-col-header-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.qt-col-header-inner .qt-editable {
+  width: 100%;
+  text-align: center;
+  word-break: break-word;
+}
+
+.qt-col-index {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.65;
+  letter-spacing: 0.5px;
+  align-self: flex-start;
+  background: rgba(0,0,0,0.18);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  cursor: default;
+  user-select: none;
+}
+
+/* 鈹€鈹€ Inline Type Dropdown 鈹€鈹€ */
+.type-dropdown-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  padding: 4px 0;
+  min-width: 148px;
+  animation: fadeInDown 0.12s ease;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.type-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+
+.type-dropdown-item:hover {
+  background: var(--btn-hover);
+}
+
+.type-dropdown-item.active {
+  background: var(--bg-panel-item-active);
+  font-weight: 700;
+}
+
+.type-dd-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.type-dd-dot-empty {
+  background: var(--text-muted) !important;
+  opacity: 0.4;
+}
+
+/* 鈹€鈹€ Image block 鈹€鈹€ */
+.qt-col-img {
+  border-bottom: 1px solid #000;
+  flex-shrink: 0;
+}
+
+.qt-col-img img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+  background: #555;
+  display: block;
+}
+
+.qt-col-img-empty {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Multi-image wrap in table layout 鈥?vertical stack, images fill column width */
+.qt-img-multi-wrap {
+  display: flex;
+  flex-direction: column;  /* vertical stack */
+  gap: 0;
+  padding: 0;
+  align-items: stretch;
+  outline: none;
+  transition: box-shadow 0.15s;
+  cursor: pointer;
+}
+
+.qt-img-multi-wrap:hover,
+.qt-img-multi-wrap.qt-img-focused {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.qt-img-multi-wrap.qt-img-drop-hover {
+  box-shadow: inset 0 0 0 3px var(--accent);
+  background: rgba(99,102,241,0.06);
+}
+
+.qt-img-thumb {
+  flex: 0 0 auto;
+  width: 100%;             /* full column width */
+  cursor: zoom-in;
+  overflow: hidden;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
+}
+
+.qt-img-thumb:last-child {
+  border-bottom: none;
+}
+
+.qt-img-thumb img {
+  width: 100%;
+  height: 160px;           /* taller per image since they stack vertically */
+  object-fit: cover;
+  display: block;
+}
+
+/* 鈹€鈹€ Nested fields table: 2-col [label | value] 鈹€鈹€ */
+.qt-fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-bottom: 1px solid #000;
+  flex-shrink: 0;
+  /* don't stretch; let qt-col-desc fill the rest */
+}
+
+.qt-fields-table tr {
+  border-bottom: 1px solid #000;
+}
+
+.qt-fields-table tr:last-child {
+  border-bottom: none;
+}
+
+/* Label cell */
+.qt-fl {
+  width: 80px;
+  min-width: 72px;
+  padding: 7px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-toolbar);
+  border-right: 1px solid #000;
+  vertical-align: top;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+/* Value cell */
+.qt-fv {
+  padding: 7px 9px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-word;
+  outline: none;
+  vertical-align: top;
+  min-height: 34px;
+  transition: background 0.15s;
+}
+
+.qt-fv:focus {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.qt-fv:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  font-style: italic;
+}
+
+/* Required-field empty state */
+.qt-fv-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.qt-fv-empty:focus {
+  font-style: normal;
+  color: var(--text-secondary);
+}
+
+/* Trigger select cell */
+.qt-fv-select {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  user-select: none;
+}
+
+.qt-fv-select:hover {
+  background: var(--btn-hover);
+}
+
+.qt-select-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* 鈹€鈹€ Inline image zone (replaces qt-img-drop) 鈹€鈹€ */
+.qt-img-zone {
+  position: relative;
+  outline: none;
+  cursor: default;
+  transition: box-shadow 0.15s;
+}
+
+/* Empty zone: clicking selects for Ctrl+V */
+.qt-col-img-empty.qt-img-zone,
+.tl-image-placeholder.qt-img-zone {
+  cursor: pointer;
+}
+
+.qt-img-zone.qt-img-focused {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.qt-img-zone.qt-img-drop-hover {
+  box-shadow: inset 0 0 0 3px var(--accent) !important;
+  opacity: 0.75;
+}
+
+/* Has-image zone: double-click to enlarge */
+.qt-img-has-img {
+  cursor: zoom-in;
+}
+
+/* Replace button (bottom-right of image zone) */
+.qt-img-replace-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 28px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+  padding: 0;
+}
+
+.qt-img-zone:hover .qt-img-replace-btn,
+.qt-img-zone.qt-img-focused .qt-img-replace-btn {
+  opacity: 1;
+}
+
+.qt-img-replace-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Empty zone: replace btn always visible (not just on hover) */
+.qt-img-replace-btn-always {
+  opacity: 0.75 !important;
+}
+
+.qt-img-replace-btn-always:hover {
+  opacity: 1 !important;
+}
+
+/* Empty zone inner layout */
+.qt-col-img-empty.qt-img-zone,
+.tl-image-placeholder.qt-img-zone {
+  position: relative;
+}
+
+.qt-img-empty-hint {
+  pointer-events: none;
+}
+
+/* 鈹€鈹€ Image Preview Modal 鈹€鈹€ */
+#img-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+}
+
+.img-preview-backdrop {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  cursor: zoom-out;
+}
+
+.img-preview-img {
+  max-width: 92vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  animation: previewIn 0.18s ease;
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.img-preview-hint {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* 鈹€鈹€ Description block 鈹€鈹€ */
+.qt-col-desc {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  word-break: break-word;
+  outline: none;
+  min-height: 80px;
+  flex: 1;
+  /* stretch to fill remaining height in flex step cell */
+  transition: background 0.15s;
+}
+
+.qt-col-desc:focus {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.qt-col-desc:empty::before {
+  content: '锛堟殏鏃犳弿杩帮級';
+  color: var(--text-muted);
+  pointer-events: none;
+}
+

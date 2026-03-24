@@ -1,0 +1,291 @@
+﻿/* ===== Toolbar / Top Bar ===== */
+#top-bar, #toolbar {
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px;
+  height: 50px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 8px;
+  z-index: 100;
+}
+
+/* App logo */
+.app-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, var(--accent), #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* 鈹€鈹€ Left section 鈹€鈹€ */
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tb-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tb-back-btn:hover {
+  background: var(--btn-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.tb-title-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  width: 200px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+.tb-title-input::placeholder { color: var(--text-muted); font-weight: 400; }
+.tb-title-input:hover { background: var(--btn-hover); }
+.tb-title-input:focus { background: var(--btn-hover); }
+
+/* 鈹€鈹€ Center section 鈹€鈹€ */
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Select pill (layout / theme) */
+.tb-select-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.tb-select-pill:hover {
+  border-color: var(--accent);
+  background: var(--btn-hover);
+}
+.tb-select-icon {
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.tb-select-pill select {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  /* Keep native dropdown but hide the arrow visually */
+  appearance: none;
+  -webkit-appearance: none;
+  /* Give room for our custom 鈻?arrow on the right */
+  padding-left: 0;
+  padding-right: 18px;
+  /* Let the select grow to fit its content */
+  min-width: 48px;
+}
+/* Custom 鈻?arrow overlay */
+.tb-select-pill::after {
+  content: '鈻?;
+  font-size: 10px;
+  color: var(--text-muted);
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* Slider pill */
+.tb-slider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-panel);
+  transition: all 0.15s;
+}
+.tb-slider-pill:hover { border-color: var(--accent); }
+.tb-slider-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tb-slider-val {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.tb-slider-pill input[type=range] {
+  -webkit-appearance: none;
+  width: 90px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.tb-slider-pill input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.tb-slider-pill input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* 鈹€鈹€ Right section 鈹€鈹€ */
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Button group */
+.tb-btn-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Individual icon button inside groups or standalone */
+.tb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  line-height: 1;
+}
+.tb-icon-btn:last-child { border-right: none; }
+.tb-btn-group > label.tb-icon-btn:last-child { border-right: none; }
+.tb-icon-btn:hover {
+  background: var(--btn-hover);
+  color: var(--text-primary);
+}
+.tb-icon-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+.tb-icon-btn:disabled:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+/* Standalone icon btn (undo/redo are now inside a .tb-btn-group, this is ok) */
+
+/* AI Import button */
+.tb-icon-btn-ai {
+  background: linear-gradient(135deg, #7c3aed18, #4f46e510);
+  color: #7c3aed !important;
+  font-weight: 600 !important;
+}
+.tb-icon-btn-ai:hover {
+  background: linear-gradient(135deg, #7c3aed28, #4f46e520) !important;
+}
+
+/* Add step button */
+.tb-icon-btn-add {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent) !important;
+  font-weight: 600 !important;
+}
+.tb-icon-btn-add:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+
+/* Vertical divider between groups */
+.tb-divider-v {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* Legacy compat */
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.tb-btn:hover {
+  background: var(--btn-hover);
+  color: var(--text-primary);
+}
+
+.tb-autosave-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+

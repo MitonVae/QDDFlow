@@ -1,0 +1,85 @@
+﻿/* ===== Home Page ===== */
+#home-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+.home-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.home-empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 40px;
+  text-align: center;
+}
+
+#qdd-card-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.qdd-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  min-width: 200px;
+  max-width: 320px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.qdd-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.qdd-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+  flex: 1;
+}
+
+.qdd-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.qdd-card-rename,
+.qdd-card-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.qdd-card-rename:hover {
+  opacity: 1;
+  background: var(--btn-hover);
+}
+
+.qdd-card-delete:hover {
+  opacity: 1;
+  background: #ff6b6b22;
+}
+

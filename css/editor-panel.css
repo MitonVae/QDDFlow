@@ -1,0 +1,280 @@
+﻿/* ===== Editor Panel ===== */
+#editor-panel {
+  width: 300px;
+  min-width: 260px;
+  max-width: 360px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  resize: horizontal;
+}
+
+#editor-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+#editor-panel-header span { flex: 1; }
+
+#editor-panel-header small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Batch toggle button in header */
+.sl-batch-toggle {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.sl-batch-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.sl-batch-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#steps-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#steps-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+#steps-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#steps-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* Step item in list */
+.step-item {
+  background: var(--bg-panel-item);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.step-item:hover {
+  background: var(--bg-panel-item-active);
+  border-color: var(--accent);
+}
+
+.step-item.active {
+  background: var(--bg-panel-item-active);
+  border-color: var(--accent);
+}
+
+.step-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.step-item-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-item-actions {
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.step-item:hover .step-item-actions {
+  opacity: 1;
+}
+
+.step-item-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.step-item-actions button:hover {
+  color: var(--text-primary);
+  background: var(--btn-hover);
+}
+
+.step-item-actions .del-btn:hover {
+  color: var(--danger);
+}
+
+.step-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 0 2px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.step-drag-handle:active {
+  cursor: grabbing;
+}
+
+.step-item.dragging {
+  opacity: 0.4;
+}
+
+.step-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: white;
+  margin-left: 4px;
+  width: auto;
+  height: auto;
+}
+
+#steps-list-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Add row: count input + add button */
+.sl-add-row {
+  display: flex;
+  gap: 6px;
+}
+
+.sl-add-row input[type=number] {
+  width: 52px;
+  flex-shrink: 0;
+  padding: 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg-panel));
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.sl-add-btn {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.sl-add-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Batch action bar */
+.batch-action-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.batch-action-bar.hidden { display: none; }
+
+.sl-select-all-btn {
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sl-select-all-btn:hover { background: var(--bg-panel-item-active); }
+
+.sl-batch-del-btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: #c0392b;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sl-batch-del-btn:hover { background: #e74c3c; }
+
+.sl-batch-cancel-btn {
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sl-batch-cancel-btn:hover { background: var(--bg-panel-item-active); }
+
+/* Batch checkbox in step item */
+.batch-cb {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.step-item.batch-selected {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--accent);
+}
+

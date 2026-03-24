@@ -1,0 +1,56 @@
+﻿/* ===== Preview Area ===== */
+#preview-area {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-preview);
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  position: relative;
+}
+
+#preview-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#preview-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#preview-area::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+#preview-scroll-wrap {
+  min-width: 100%;
+}
+
+#preview-canvas {
+  display: inline-flex;
+  align-items: flex-start;
+  min-height: 200px;
+}
+
+/* ===== EMPTY STATE ===== */
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  width: 100%;
+  color: var(--text-muted);
+  text-align: center;
+  gap: 12px;
+}
+
+.preview-empty .empty-icon {
+  font-size: 48px;
+}
+
+.preview-empty p {
+  font-size: 14px;
+}
+

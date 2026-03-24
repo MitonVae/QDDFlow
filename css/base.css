@@ -1,0 +1,107 @@
+/* ===== Base ===== */
+:root {
+  --bg-app: #1e1e2f;
+  --bg-panel: #2a2a36;
+  --bg-panel-item: #32323e;
+  --bg-panel-item-active: #3c3c4a;
+  --bg-card: #2a2a36;
+  --bg-toolbar: #242430;
+  --bg-preview: #1a1a24;
+  --border: #3a3a48;
+  --accent: #5c9eff;
+  --accent-hover: #4a8aff;
+  --text-primary: #eef2ff;
+  --text-secondary: #b4b8cf;
+  --text-muted: #7a7e9a;
+  --btn-bg: #32323e;
+  --btn-hover: #3e3e4c;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --radius: 12px;
+  --radius-sm: 6px;
+}
+
+/* Light Theme */
+body.theme-light {
+  --bg-app: #f0f2f7;
+  --bg-toolbar: #ffffff;
+  --bg-panel: #e8eaf2;
+  --bg-panel-item: #ffffff;
+  --bg-panel-item-active: #eef0fa;
+  --bg-card: #e8eaf2;
+  --bg-preview: #dde0ea;
+  --border: #d0d4e0;
+  --text-primary: #1a1c28;
+  --text-secondary: #555d72;
+  --text-muted: #9099b0;
+  --accent: #5b4de8;
+  --accent-hover: #4a3dd0;
+  --btn-bg: #e8eaf2;
+  --btn-hover: #d8dbea;
+  --shadow: 0 2px 12px rgba(0,0,0,0.12);
+}
+
+/* Cyber Theme */
+body.theme-cyber {
+  --bg-app: #0d0117;
+  --bg-toolbar: #100120;
+  --bg-panel: #140225;
+  --bg-panel-item: #1a0530;
+  --bg-panel-item-active: #220645;
+  --bg-card: #140225;
+  --bg-preview: #0a0015;
+  --border: #4a0080;
+  --text-primary: #f0d0ff;
+  --text-secondary: #b060d0;
+  --text-muted: #6030a0;
+  --accent: #cc44ff;
+  --accent-hover: #bb33ee;
+  --btn-bg: #1e0440;
+  --btn-hover: #2a0560;
+  --shadow: 0 2px 20px rgba(200,0,255,0.3);
+}
+
+/* Dark Theme */
+body.theme-dark {
+  --bg-app: #1a1c22;
+  --bg-toolbar: #12141a;
+  --bg-panel: #1e2028;
+  --bg-panel-item: #252830;
+  --bg-panel-item-active: #2e3240;
+  --bg-card: #1e2028;
+  --bg-preview: #13151c;
+  --border: #353a4a;
+  --text-primary: #e8eaf0;
+  --text-secondary: #8b90a0;
+  --text-muted: #555d72;
+  --accent: #7c6af7;
+  --accent-hover: #9480ff;
+  --btn-bg: #2a2d3a;
+  --btn-hover: #353a4a;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
