@@ -1460,79 +1460,95 @@ function renderTableLayout() {
   bindInlineImageZones($previewCanvas);
 }
 
-// ===== Copy Table to Clipboard (HTML format, per-column independent field rows) =====
+// ===== Copy Table to Clipboard =====
+// Flat multi-row HTML table (no nesting). Each step = 2 cols (label|value).
+// Field rows: only show a row if at least ONE step has a value for that field.
+// For steps without a value in that row → show empty cells (no label, no dash).
 function copyTableToClipboard() {
   const steps = STATE.steps;
   if (!steps.length) { showToast('⚠️ 没有环节可复制'); return; }
 
   // Helper: escape HTML
   const h = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
   // Helper: hex → rgba
   const hexToRgba = (hex, alpha) => {
     const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return `rgba(${r},${g},${b},${alpha})`;
   };
 
-  // ── Styles ──
-  const outerBorder = `border:1px solid #bbb;`;
-  const innerBorder = `border:0;`;
-  const labelStyle  = `padding:3px 5px;background:#f0f0f0;color:#444;font-weight:600;white-space:nowrap;vertical-align:top;font-size:11px;`;
-  const valStyle    = `padding:3px 6px;vertical-align:top;word-break:break-word;font-size:11px;`;
-  const descStyle   = `padding:5px 7px;vertical-align:top;word-break:break-word;font-size:11px;color:#222;line-height:1.6;`;
-  const imgCellSt   = `padding:5px;text-align:center;vertical-align:middle;`;
+  const B = `border:1px solid #bbb;`;
+  const fnt = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;`;
+  // cell style builders
+  const cs  = extra => `${B}${fnt}${extra}`;
+  const lbl = color  => cs(`padding:3px 5px;background:#f0f0f0;color:#555;font-weight:600;white-space:nowrap;vertical-align:top;`);
+  const val = color  => cs(`padding:3px 6px;background:${hexToRgba(color,0.05)};vertical-align:top;word-break:break-word;`);
+  const emp = ()     => cs(`padding:0;background:#fff;`); // empty placeholder cell
 
-  // ── Build one <td> block per step ──
-  // Each step is ONE outer <td> containing a nested mini-table
-  const stepTds = steps.map((step, i) => {
+  // Collect all field defs in order: fixed fields first, then all custom keys seen across steps
+  const customKeys = [];
+  steps.forEach(s => (s.customFields||[]).forEach(f => { if(f.key && !customKeys.includes(f.key)) customKeys.push(f.key); }));
+
+  const allFields = [
+    { key: '__trigger',    label: '触发方式', get: s => s.trigger || '' },
+    { key: '__location',   label: '位置',     get: s => s.location || '' },
+    { key: '__characters', label: '出场人物', get: s => s.characters || '' },
+    ...customKeys.map(k => ({
+      key: k, label: k,
+      get: s => { const cf = (s.customFields||[]).find(f=>f.key===k); return cf ? (cf.value||'') : ''; }
+    })),
+  ];
+
+  // Only keep field rows where at least one step has a non-empty value
+  const activeFields = allFields.filter(fd => steps.some(s => fd.get(s).trim() !== ''));
+
+  // ── Row 1: image row — each step spans 2 cols ──
+  const imgCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
-    const bg    = hexToRgba(color, 0.05);
-
-    // 1. Image sub-row
     const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
-    const imgContent = imgs.length > 0
-      ? imgs.map(url => `<img src="${h(url)}" style="max-width:180px;max-height:120px;display:inline-block;margin:2px;vertical-align:middle;">`).join('')
-      : `<span style="font-size:11px;color:#aaa;">🖼 在属性面板添加配图</span>`;
-    const imgRow = `<tr><td colspan="2" style="${imgCellSt}background:${hexToRgba(color,0.07)};height:80px;">${imgContent}</td></tr>`;
-
-    // 2. Title row (name + type badge on new line)
-    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    const typeLine = typeInfo
-      ? `<div style="margin-top:4px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.35);color:#fff;letter-spacing:0.5px;">${h(typeInfo.value)}</span></div>`
-      : '';
-    const titleRow = `<tr><td colspan="2" style="padding:8px 6px 7px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,0.3);line-height:1.3;">${h(step.name || '未命名环节')}${typeLine}</td></tr>`;
-
-    // 3. Field rows — only fields with a non-empty value for THIS step
-    const allFieldDefs = [
-      { label: '触发方式', val: step.trigger || '' },
-      { label: '位置',     val: step.location || '' },
-      { label: '出场人物', val: step.characters || '' },
-      ...(step.customFields || []).filter(f => f.key).map(f => ({ label: f.key, val: f.value || '' })),
-    ];
-    const fieldRows = allFieldDefs
-      .filter(fd => fd.val.trim() !== '')   // ← skip empty fields entirely
-      .map(fd => `<tr>
-        <td style="${labelStyle}border-right:1px solid #ddd;">${h(fd.label)}：</td>
-        <td style="${valStyle}background:${bg};">${h(fd.val)}</td>
-      </tr>`)
-      .join('');
-
-    // 4. Description row (only if non-empty)
-    const desc = (step.desc || '').trim();
-    const descRow = desc
-      ? `<tr><td colspan="2" style="${descStyle}background:${bg};border-top:1px solid #ddd;">${desc.replace(/\n/g,'<br>')}</td></tr>`
-      : '';
-
-    // Assemble inner mini-table for this step
-    const innerTable = `<table style="border-collapse:collapse;width:100%;font-family:微软雅黑,Arial,sans-serif;" cellspacing="0" cellpadding="0">
-      <tbody>${imgRow}${titleRow}${fieldRows}${descRow}</tbody>
-    </table>`;
-
-    return `<td style="${outerBorder}padding:0;vertical-align:top;min-width:180px;">${innerTable}</td>`;
+    const inner = imgs.length > 0
+      ? imgs.map(url => `<img src="${h(url)}" style="max-width:160px;max-height:110px;display:inline-block;margin:2px;">`).join('')
+      : `<span style="${fnt}color:#aaa;">🖼 在属性面板添加配图</span>`;
+    return `<td colspan="2" style="${B}${fnt}padding:5px;text-align:center;vertical-align:middle;background:${hexToRgba(color,0.07)};height:80px;">${inner}</td>`;
   }).join('');
 
-  // ── Outer wrapper row ──
-  const tableHtml = `<table style="border-collapse:collapse;font-family:微软雅黑,Arial,sans-serif;" cellspacing="0" cellpadding="0"><tbody><tr>${stepTds}</tr></tbody></table>`;
+  // ── Row 2: title row — each step spans 2 cols ──
+  const titleCells = steps.map((step, i) => {
+    const color = getStepColor(step, i);
+    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
+    const badge = typeInfo
+      ? `<br><span style="display:inline-block;margin-top:3px;padding:1px 9px;border-radius:9px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.32);color:#fff;">${h(typeInfo.value)}</span>`
+      : '';
+    return `<td colspan="2" style="${B}${fnt}padding:7px 6px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);line-height:1.4;">${h(step.name||'未命名环节')}${badge}</td>`;
+  }).join('');
+
+  // ── Field rows — one <tr> per active field ──
+  const fieldRowsHtml = activeFields.map(fd => {
+    const cells = steps.map((step, i) => {
+      const color = getStepColor(step, i);
+      const v = fd.get(step).trim();
+      if (!v) {
+        // This step has no value: show two empty cells (no label, no dash)
+        return `<td style="${emp()}"></td><td style="${emp()}"></td>`;
+      }
+      return `<td style="${lbl(color)}">${h(fd.label)}：</td><td style="${val(color)}">${h(v)}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  // ── Description row — each step spans 2 cols ──
+  const hasDesc = steps.some(s => (s.desc||'').trim());
+  const descRowHtml = hasDesc ? `<tr>${steps.map((step,i) => {
+    const color = getStepColor(step, i);
+    const desc = (step.desc||'').trim().replace(/\n/g,'<br>');
+    return `<td colspan="2" style="${B}${fnt}padding:6px 7px;vertical-align:top;background:${hexToRgba(color,0.05)};word-break:break-word;line-height:1.6;">${desc}</td>`;
+  }).join('')}</tr>` : '';
+
+  const tableHtml = `<table style="border-collapse:collapse;" cellspacing="0" cellpadding="0"><tbody>
+    <tr>${imgCells}</tr>
+    <tr>${titleCells}</tr>
+    ${fieldRowsHtml}
+    ${descRowHtml}
+  </tbody></table>`;
 
   // Write both HTML and plain-text to clipboard
   const plainText = steps.map(s => {
