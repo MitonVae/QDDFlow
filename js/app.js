@@ -100,33 +100,39 @@ function init() {
   STATE.theme    = prefs.theme;
   STATE.colWidth = prefs.colWidth;
 
+  loadCustomCategories();
+
   const saved = loadAllQdds();
-  console.log('[init] loadAllQdds结果:', saved,
-    '| qdds数量:', saved ? saved.length : 'null',
-    '| 总steps:', saved ? saved.reduce((n,q)=>n+(q.steps||[]).length,0) : 'null');
   if (saved && saved.length > 0) {
     STORE.qdds = saved;
+    log.info(`init: 加载 ${saved.length} 个QDD，共 ${saved.reduce((n,q)=>n+(q.steps||[]).length,0)} 步骤`);
   } else {
     const defaultQdd = { id: genId(), title: '主线任务 · 示例', steps: getSampleData() };
     STORE.qdds = [defaultQdd];
     saveAllQdds();
+    log.info('init: 无已存数据，创建示例QDD');
   }
 
   applyTheme(STATE.theme);
   bindGlobalEvents();
 
-  // 如果是分享链接，直接进入只读预览
+  // 分享链接模式：直接进入只读预览
   if (window.location.hash.startsWith('#share=')) {
+    log.info('init: 分享链接模式');
     tryLoadSharedQdd();
     return;
   }
 
   // 后台静默迁移旧 base64 → IndexedDB（不阻塞页面渲染）
-  migrateAllImagesToDb().catch(() => {});
+  migrateAllImagesToDb().catch(e => log.warn('init: 图片迁移失败', e));
 
   if (prefs.lastView === 'editor' && prefs.lastQdd) {
     const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
-    if (qdd) { openQdd(qdd.id); return; }
+    if (qdd) {
+      log.info('init: 恢复上次编辑器状态，QDD=', qdd.title);
+      openQdd(qdd.id);
+      return;
+    }
   }
   showHomePage();
 }

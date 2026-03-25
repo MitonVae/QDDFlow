@@ -8,10 +8,31 @@ const TASK_TYPES = [
 ];
 const TASK_TYPE_MAP = Object.fromEntries(TASK_TYPES.filter(t => t.value).map(t => [t.value, t]));
 
-const TRIGGER_OPTIONS = [
+// 动态合并内置 + 自定义任务类型（STORE 初始化后可用）
+function getTaskTypes() {
+  return [...TASK_TYPES, ...(STORE.customTaskTypes || [])];
+}
+
+// 动态合并内置 + 自定义触发方式
+function getTriggerOptions() {
+  return [...TRIGGER_OPTIONS_BASE, ...(STORE.customTriggers || [])];
+}
+
+// 查找任意任务类型（内置 + 自定义）
+function findTaskType(value) {
+  if (!value) return null;
+  return TASK_TYPE_MAP[value]
+    || (STORE.customTaskTypes || []).find(t => t.value === value)
+    || null;
+}
+
+const TRIGGER_OPTIONS_BASE = [
   'Room触发',
   '接续自动触发',
   '剧情触发',
   '玩家选择',
   '接续',
 ];
+
+// 向后兼容：TRIGGER_OPTIONS 本身仍可作为基础列表使用
+const TRIGGER_OPTIONS = TRIGGER_OPTIONS_BASE;

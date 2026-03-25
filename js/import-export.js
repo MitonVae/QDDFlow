@@ -125,17 +125,15 @@ function confirmImport() {
 // ===== Export PNG / PDF =====
 
 /**
- * 对 target 节点截图，与屏幕预览像素级一致。
- *
- * 策略：
- * 1. 等待所有图片加载完毕
- * 2. 临时解除 target 及所有祖先的 overflow / flex-height 限制，
- *    使 html2canvas 能看到超出滚动区的完整内容
- * 3. 用 target 的绝对文档坐标 + scrollWidth/scrollHeight 截图
- * 4. 截完立即还原所有样式
+ * 截图核心：离屏克隆渲染方案。
+ * 原理：把 target 深拷贝到视口外的独立容器，锁定每个节点的像素尺寸，
+ * 对克隆截图——原始 DOM 完全不动，边框/布局不受 html2canvas 重排影响。
  */
 async function _captureNode(target, scale) {
-  // 1. 等所有图片加载
+  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
+    .backgroundColor || '#ffffff';
+
+  // 1. 等待原始节点中所有图片加载完毕
   await Promise.all(
     Array.from(target.querySelectorAll('img')).map(img =>
       img.complete ? Promise.resolve()
@@ -143,89 +141,104 @@ async function _captureNode(target, scale) {
     )
   );
 
-  // 2. 导出前隐藏所有标记了 data-export-hide 的元素（如无图占位区）
-  const hidden = Array.from(target.querySelectorAll('[data-export-hide]'));
-  hidden.forEach(el => { el._prevDisplay = el.style.display; el.style.display = 'none'; });
+  const srcW = target.scrollWidth;
+  const srcH = target.scrollHeight;
+  log.debug('_captureNode: srcW=', srcW, 'srcH=', srcH);
 
-  // 3. 临时解除祖先的 overflow / height 限制
-  const restored = [];
-  let el = target.parentElement;
-  while (el && el !== document.documentElement) {
-    const s = el.style;
-    const cs = getComputedStyle(el);
-    const entry = { el, overflow: s.overflow, overflowX: s.overflowX, overflowY: s.overflowY, height: s.height, maxHeight: s.maxHeight };
-    let changed = false;
-    if (cs.overflow !== 'visible')  { s.overflow  = 'visible'; changed = true; }
-    if (cs.overflowX !== 'visible') { s.overflowX = 'visible'; changed = true; }
-    if (cs.overflowY !== 'visible') { s.overflowY = 'visible'; changed = true; }
-    if (cs.height !== 'auto' && (el.style.height || cs.height === '0px')) {
-      s.height = 'auto'; changed = true;
-    }
-    if (changed) restored.push(entry);
-    el = el.parentElement;
-  }
+  // 2. 建立离屏容器（fixed 定位，移出视口，不影响页面布局）
+  const offscreen = document.createElement('div');
+  offscreen.style.cssText =
+    `position:fixed;top:0;left:-99999px;width:${srcW}px;height:auto;` +
+    'overflow:visible;z-index:-1;pointer-events:none;';
 
-  // 4. 等浏览器重排
+  // 3. 深度克隆 target
+  const clone = target.cloneNode(true);
+  clone.style.width    = srcW + 'px';
+  clone.style.height   = 'auto';
+  clone.style.overflow = 'visible';
+  clone.style.position = 'static';
+  clone.style.transform = 'none';
+
+  // 4. 把每个节点的真实像素尺寸写入克隆节点的 style
+  //    这样 html2canvas 渲染克隆时不会因 windowWidth 变化导致重排
+  const srcNodes   = [target, ...target.querySelectorAll('*')];
+  const cloneNodes = [clone,  ...clone.querySelectorAll('*')];
+  srcNodes.forEach((src, i) => {
+    const dst  = cloneNodes[i];
+    if (!dst) return;
+    const rect = src.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    dst.style.width     = rect.width  + 'px';
+    dst.style.height    = rect.height + 'px';
+    dst.style.minWidth  = rect.width  + 'px';
+    dst.style.minHeight = rect.height + 'px';
+    dst.style.maxWidth  = rect.width  + 'px';
+    dst.style.maxHeight = rect.height + 'px';
+    dst.style.boxSizing  = 'border-box';
+    dst.style.flexShrink = '0';
+    dst.style.flexGrow   = '0';
+    dst.style.overflow   = 'visible';
+    dst.style.overflowX  = 'visible';
+    dst.style.overflowY  = 'visible';
+  });
+
+  offscreen.appendChild(clone);
+  document.body.appendChild(offscreen);
+
+  // 5. 等两帧让浏览器完成布局，等克隆图片缓存命中
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
+  await Promise.all(
+    Array.from(clone.querySelectorAll('img')).map(img =>
+      img.complete ? Promise.resolve()
+        : new Promise(r => { img.onload = r; img.onerror = r; })
+    )
+  );
 
-  // 5. 量取坐标和尺寸
-  const rect = target.getBoundingClientRect();
-  const absX = Math.round(rect.left + window.scrollX);
-  const absY = Math.round(rect.top  + window.scrollY);
-  const W    = Math.ceil(target.scrollWidth);
-  const H    = Math.ceil(target.scrollHeight);
+  const cloneW = clone.scrollWidth;
+  const cloneH = clone.scrollHeight;
+  log.debug('_captureNode: cloneW=', cloneW, 'cloneH=', cloneH);
 
-  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
-    .backgroundColor || '#ffffff';
-
-  let canvas;
   try {
-    canvas = await html2canvas(document.body, {
-      backgroundColor:  bgColor,
+    const canvas = await html2canvas(clone, {
+      backgroundColor: bgColor,
       scale,
-      useCORS:          true,
-      allowTaint:       true,
-      x:                absX,
-      y:                absY,
-      width:            W,
-      height:           H,
-      windowWidth:      document.documentElement.scrollWidth,
-      windowHeight:     document.documentElement.scrollHeight,
-      scrollX:          0,
-      scrollY:          0,
-      logging:          false,
+      useCORS:     true,
+      allowTaint:  true,
+      x:           0,
+      y:           0,
+      width:       cloneW,
+      height:      cloneH,
+      windowWidth:  cloneW,
+      windowHeight: cloneH,
+      scrollX:     0,
+      scrollY:     0,
+      logging:     false,
     });
+    return canvas;
   } finally {
-    // 6. 还原隐藏的元素
-    hidden.forEach(el => { el.style.display = el._prevDisplay || ''; delete el._prevDisplay; });
-    // 7. 还原 overflow / height
-    restored.forEach(({ el, overflow, overflowX, overflowY, height, maxHeight }) => {
-      el.style.overflow  = overflow;
-      el.style.overflowX = overflowX;
-      el.style.overflowY = overflowY;
-      el.style.height    = height;
-      el.style.maxHeight = maxHeight;
-    });
+    document.body.removeChild(offscreen);
   }
-  return canvas;
 }
 
 async function exportPng() {
   showToast('🖼️ 正在生成图片...');
   const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
-  const title = document.getElementById('questTitle')?.value || 'flow';
+  const titleInput = document.getElementById('questTitle');
+  const filename = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.png`;
+  log.info('exportPng: 开始，target=', target.tagName, 'filename=', filename);
   try {
     const canvas = await _captureNode(target, 2);
-    const a = document.createElement('a');
-    a.download = `QDD_${title.replace(/\s+/g, '_')}.png`;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
+    log.info('exportPng: 截图完成，尺寸=', canvas.width, 'x', canvas.height);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
     showToast('✅ PNG 已导出');
   } catch (e) {
+    log.error('exportPng: 失败', e);
     showToast('❌ 导出失败：' + e.message);
-    console.error(e);
   }
 }
 
@@ -233,11 +246,15 @@ async function exportPdf() {
   showToast('📄 正在生成PDF...');
   const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
-  const title = document.getElementById('questTitle')?.value || 'flow';
+  const titleInput = document.getElementById('questTitle');
+  const filename = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`;
+  log.info('exportPdf: 开始，filename=', filename);
   try {
     const canvas = await _captureNode(target, 2);
+    log.info('exportPdf: 截图完成，尺寸=', canvas.width, 'x', canvas.height);
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const { jsPDF } = window.jspdf;
+    if (!jsPDF) throw new Error('jsPDF 库未加载');
     const pdfW = canvas.width  * 0.75;
     const pdfH = canvas.height * 0.75;
     const pdf  = new jsPDF({
@@ -246,11 +263,11 @@ async function exportPdf() {
       format: [pdfW, pdfH],
     });
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-    pdf.save(`QDD_${title.replace(/\s+/g, '_')}.pdf`);
+    pdf.save(filename);
     showToast('✅ PDF 已导出');
   } catch (e) {
+    log.error('exportPdf: 失败', e);
     showToast('❌ 导出失败：' + e.message);
-    console.error(e);
   }
 }
 

@@ -269,16 +269,15 @@ function openStepEditor(id) {
   const title = step ? `编辑环节：${step.name}` : '新增环节';
   const currentTaskType = step?.taskType || '';
   // Color: use colorOverride if set, else derive from taskType, else preset
-  const defaultColor = currentTaskType && TASK_TYPE_MAP[currentTaskType]
-    ? TASK_TYPE_MAP[currentTaskType].color
-    : (PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length]);
+  const defaultColor = findTaskType(currentTaskType)?.color
+    || PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length];
   const selectedColor = step?.colorOverride || step?.color || defaultColor;
 
-  const taskTypeOptionsHtml = TASK_TYPES.map(t =>
+  const taskTypeOptionsHtml = getTaskTypes().map(t =>
     `<option value="${t.value}"${t.value === currentTaskType ? ' selected' : ''}>${t.label}</option>`
   ).join('');
 
-  const triggerOptionsHtml = ['', ...TRIGGER_OPTIONS].map(v =>
+  const triggerOptionsHtml = ['', ...getTriggerOptions()].map(v =>
     `<option value="${v}"${v === (step?.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
@@ -361,6 +360,12 @@ function openStepEditor(id) {
   `;
   // Set initial color picker hidden input
   modal.querySelector('#ef-color-picker').dataset.selected = selectedColor;
+
+  // 如果图片是 idb: 引用，异步解析后刷新预览区
+  if (step?.imageUrl && step.imageUrl.startsWith('idb:')) {
+    refreshEditorImagePreview(step.imageUrl);
+  }
+  log.info('openStepEditor:', id || '新建');
 }
 
 function renderCustomFieldRow(index, key='', value='') {
@@ -404,13 +409,11 @@ function getSelectedColor() {
 }
 
 function onTaskTypeChange(typeVal) {
-  // Auto-fill color from taskType, but allow manual override afterwards
-  if (typeVal && TASK_TYPE_MAP[typeVal]) {
-    const autoColor = TASK_TYPE_MAP[typeVal].color;
-    selectPresetColor(autoColor);
-    // Also update the color picker
+  const typeInfo = findTaskType(typeVal);
+  if (typeInfo?.color) {
+    selectPresetColor(typeInfo.color);
     const picker = document.getElementById('ef-color-picker');
-    if (picker) { picker.value = autoColor; picker.dataset.selected = autoColor; }
+    if (picker) { picker.value = typeInfo.color; picker.dataset.selected = typeInfo.color; }
   }
 }
 
@@ -431,7 +434,7 @@ function saveStep() {
   });
 
   const taskType = document.getElementById('ef-tasktype')?.value || '';
-  const autoColor = taskType && TASK_TYPE_MAP[taskType] ? TASK_TYPE_MAP[taskType].color : null;
+  const autoColor = findTaskType(taskType)?.color || null;
   const pickedColor = getSelectedColor();
   // colorOverride = manual if it differs from the auto color for this taskType
   const colorOverride = (autoColor && pickedColor !== autoColor) ? pickedColor : null;
