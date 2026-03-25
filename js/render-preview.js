@@ -46,18 +46,7 @@ function renderTableLayout() {
     const customMap = {};
     (step.customFields || []).forEach(f => { customMap[f.key] = f.value; });
 
-    // ── Colored title header ──
-    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
-    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
-    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
-      <div class="qt-col-header-inner">
-        ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
-        ${badgeHtml}
-      </div>
-    </div>`;
-
-    // ── Image：有图才渲染，无图不占行 ──
+    // ── Image：图片放在标题上方；无图时显示虚线占位区（导出时隐藏）──
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
     const img = imgUrl
@@ -71,14 +60,25 @@ function renderTableLayout() {
                 onerror="this.style.display='none'">
            <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
          </div>`
-      : `<div class="qt-col-img-add" data-step-id="${sid}"
+      : `<div class="qt-col-img-empty" data-step-id="${sid}" data-export-hide="1"
              onclick="pickStepImage('${sid}')"
              ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
              ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
              ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
              title="点击或拖入添加图片">
-           <span>＋ 添加图片</span>
+           <span>📷 点击或拖入图片</span>
          </div>`;
+
+    // ── Colored title header ──
+    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
+    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
+    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
+    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
+      <div class="qt-col-header-inner">
+        ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
+        ${badgeHtml}
+      </div>
+    </div>`;
 
     // ── Fields: flex rows [label | value]，跳过空值 ──
     const fieldRows = fieldDefs.map(fd => {
@@ -108,7 +108,7 @@ function renderTableLayout() {
       data-step-id="${step.id}" data-field="desc">${escWithBr(step.desc || '')}</div>`;
 
     return `<td class="qt-step-cell" valign="top">
-      <div class="qt-step-inner">${header}${img}${fields}${desc}</div>
+      <div class="qt-step-inner">${img}${header}${fields}${desc}</div>
     </td>`;
   }).join('');
 

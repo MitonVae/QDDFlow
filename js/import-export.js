@@ -143,7 +143,11 @@ async function _captureNode(target, scale) {
     )
   );
 
-  // 2. 临时解除祖先的 overflow / height 限制（记录原值用于还原）
+  // 2. 导出前隐藏所有标记了 data-export-hide 的元素（如无图占位区）
+  const hidden = Array.from(target.querySelectorAll('[data-export-hide]'));
+  hidden.forEach(el => { el._prevDisplay = el.style.display; el.style.display = 'none'; });
+
+  // 3. 临时解除祖先的 overflow / height 限制
   const restored = [];
   let el = target.parentElement;
   while (el && el !== document.documentElement) {
@@ -154,7 +158,6 @@ async function _captureNode(target, scale) {
     if (cs.overflow !== 'visible')  { s.overflow  = 'visible'; changed = true; }
     if (cs.overflowX !== 'visible') { s.overflowX = 'visible'; changed = true; }
     if (cs.overflowY !== 'visible') { s.overflowY = 'visible'; changed = true; }
-    // 解除 flex 子项固定高度（height:100% 或 height:0 会导致内容被裁剪）
     if (cs.height !== 'auto' && (el.style.height || cs.height === '0px')) {
       s.height = 'auto'; changed = true;
     }
@@ -162,11 +165,11 @@ async function _captureNode(target, scale) {
     el = el.parentElement;
   }
 
-  // 3. 等浏览器重排
+  // 4. 等浏览器重排
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  // 4. 量取 target 在文档中的绝对坐标和完整内容尺寸
+  // 5. 量取坐标和尺寸
   const rect = target.getBoundingClientRect();
   const absX = Math.round(rect.left + window.scrollX);
   const absY = Math.round(rect.top  + window.scrollY);
@@ -194,7 +197,9 @@ async function _captureNode(target, scale) {
       logging:          false,
     });
   } finally {
-    // 5. 还原所有样式
+    // 6. 还原隐藏的元素
+    hidden.forEach(el => { el.style.display = el._prevDisplay || ''; delete el._prevDisplay; });
+    // 7. 还原 overflow / height
     restored.forEach(({ el, overflow, overflowX, overflowY, height, maxHeight }) => {
       el.style.overflow  = overflow;
       el.style.overflowX = overflowX;
