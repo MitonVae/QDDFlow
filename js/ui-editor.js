@@ -45,6 +45,7 @@ function buildEditorPageHTML() {
         <button class="tb-btn tb-btn-ai" id="aiImportBtn" title="用AI生成QDD结构并导入">🤖 AI 导入</button>
         <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
         <span id="autosave-label" class="tb-autosave-label"></span>
+        <button class="tb-btn" id="shareLinkBtn" title="生成分享链接">🔗 分享</button>
         <button class="tb-btn" id="exportPngBtn">🖼️ 导出PNG</button>
         <button class="tb-btn" id="exportPdfBtn">📄 导出PDF</button>
       </div>

@@ -57,6 +57,7 @@ function renderQddCards() {
     <div class="qdd-card" data-id="${qdd.id}">
       <span class="qdd-card-title">${esc(qdd.title)}</span>
       <div class="qdd-card-actions">
+        <button class="qdd-card-share" onclick="openShareDialog('${qdd.id}');event.stopPropagation()" title="生成分享链接">🔗</button>
         <button class="qdd-card-rename" onclick="renameQdd('${qdd.id}')" title="重命名">✏️</button>
         <button class="qdd-card-delete" onclick="deleteQdd('${qdd.id}')" title="删除">🗑️</button>
       </div>

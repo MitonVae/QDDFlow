@@ -82,6 +82,9 @@ function bindEditorEvents() {
   const $exportPdfBtn = document.getElementById('exportPdfBtn');
   if ($exportPdfBtn) $exportPdfBtn.addEventListener('click', exportPdf);
 
+  const $shareBtn = document.getElementById('shareLinkBtn');
+  if ($shareBtn) $shareBtn.addEventListener('click', () => openShareDialog(STATE.currentQddId));
+
   const $undoBtn = document.getElementById('undoBtn');
   if ($undoBtn) $undoBtn.addEventListener('click', undoHistory);
 
@@ -111,6 +114,12 @@ function init() {
 
   applyTheme(STATE.theme);
   bindGlobalEvents();
+
+  // 如果是分享链接，直接进入只读预览，不加载本地数据
+  if (window.location.hash.startsWith('#share=')) {
+    tryLoadSharedQdd();
+    return;
+  }
 
   // 迁移旧 base64 图片到 IndexedDB（静默后台执行）
   migrateAllImagesToDb().then(() => {
