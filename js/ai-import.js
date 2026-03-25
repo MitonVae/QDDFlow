@@ -149,6 +149,10 @@ function openAiImportPanel() {
             </div>
             <textarea class="ai-json-input" id="ai-json-input" placeholder='粘贴 AI 输出的 JSON 到这里...\n\n支持格式：\n• 单个 QDD 对象：{ "title": "...", "steps": [...] }\n• 多个 QDD 数组：[{ "title": "...", "steps": [...] }, ...]'></textarea>
             <div class="ai-import-actions">
+              <label class="ai-validate-btn" style="cursor:pointer;" title="从 AI 导出下载的 .json 文件导入（含图片）">
+                📂 从文件导入
+                <input type="file" accept=".json" style="display:none" onchange="loadAiImportFile(this)">
+              </label>
               <button class="ai-validate-btn" onclick="validateAiJson()">🔍 验证格式</button>
               <button class="ai-do-import-btn" onclick="doAiImport()">⬇️ 导入</button>
             </div>
@@ -378,34 +382,30 @@ function mergeAiStep(existing, incoming) {
 
 // ===== AI 导出面板 =====
 
-function openAiExportPanel() {
+async function openAiExportPanel() {
   const qdd = getCurrentQdd();
   if (!qdd) { showToast('❌ 没有打开的 QDD'); return; }
 
-  // 构建 AI 可读的 JSON（去除内部字段，只保留内容）
-  const exportObj = {
+  // AI 用的纯文字 JSON（不含图片）
+  const textObj = {
     title: qdd.title,
-    steps: (qdd.steps || []).map((s, i) => {
-      const step = {
-        name:       s.name       || `环节${i}`,
-        taskType:   s.taskType   || '',
-        trigger:    s.trigger    || '',
-        location:   s.location   || '',
-        characters: s.characters || '',
-        desc:       s.desc       || '',
-        customFields: (s.customFields || []).filter(f => f.key),
-      };
-      // 图片字段太大，AI 读不了 base64，直接省略
-      return step;
-    }),
+    steps: (qdd.steps || []).map((s, i) => ({
+      name:         s.name         || `环节${i}`,
+      taskType:     s.taskType     || '',
+      trigger:      s.trigger      || '',
+      location:     s.location     || '',
+      characters:   s.characters   || '',
+      desc:         s.desc         || '',
+      customFields: (s.customFields || []).filter(f => f.key),
+    })),
   };
-  const jsonText = JSON.stringify(exportObj, null, 2);
+  const jsonText = JSON.stringify(textObj, null, 2);
 
   let overlay = document.getElementById('ai-export-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'ai-export-overlay';
-    overlay.className = 'ai-import-overlay'; // 复用 AI 导入的样式
+    overlay.className = 'ai-import-overlay';
     document.body.appendChild(overlay);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeAiExportPanel(); });
   }
@@ -415,23 +415,24 @@ function openAiExportPanel() {
       <div class="ai-import-header">
         <div class="ai-import-title">
           <span>🤖 AI 导出</span>
-          <small>复制 JSON → 发给 AI → 让 AI 分析、续写或修改</small>
+          <small>当前 QDD：${escHtml(qdd.title)}（${qdd.steps.length} 个环节）</small>
         </div>
         <button class="ai-import-close" onclick="closeAiExportPanel()">×</button>
       </div>
-      <div class="ai-import-body" style="flex-direction:column;gap:12px;">
-        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
-          将下方 JSON 发给 AI，配合提示词可以让 AI：续写新环节、修改描述、调整结构、分析设计问题等。
-          <br>修改完后可以通过「AI 导入」的「修改指定环节」模式合并回来。
+      <div class="ai-import-body" style="flex-direction:column;gap:14px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="ai-do-import-btn" style="flex:1;min-width:160px;" onclick="copyAiExportJson()">
+            📋 复制文字 JSON（发给 AI）
+          </button>
+          <button class="ai-do-import-btn" style="flex:1;min-width:160px;background:linear-gradient(135deg,#059669,#0d9488);" onclick="downloadAiExportJson()">
+            💾 下载完整备份（含图片）
+          </button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:12px;color:var(--text-muted);">当前 QDD：<strong>${escHtml(qdd.title)}</strong>（${qdd.steps.length} 个环节，不含图片）</span>
-          <button class="ai-copy-btn" onclick="copyAiExportJson()">📋 复制 JSON</button>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
+          · <strong>复制文字 JSON</strong>：不含图片，直接发给 AI 让它续写/修改，再用「AI 导入」粘贴回来。<br>
+          · <strong>下载完整备份</strong>：含图片的 .json 文件，可在「AI 导入 → 从文件导入」读取还原。
         </div>
-        <pre class="ai-prompt-pre" id="ai-export-json-content" style="max-height:420px;">${escHtml(jsonText)}</pre>
-        <div style="font-size:11px;color:var(--text-muted);">
-          💡 修改后让 AI 输出相同格式的 JSON，再用「🤖 AI 导入 → 修改指定环节」合并回来。
-        </div>
+        <pre class="ai-prompt-pre" id="ai-export-json-content" style="max-height:320px;">${escHtml(jsonText)}</pre>
       </div>
     </div>
   `;
@@ -446,17 +447,56 @@ function closeAiExportPanel() {
 function copyAiExportJson() {
   const pre = document.getElementById('ai-export-json-content');
   if (!pre) return;
-  const text = pre.textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('#ai-export-overlay .ai-copy-btn');
-    if (btn) { btn.textContent = '✓ 已复制！'; setTimeout(() => { btn.textContent = '📋 复制 JSON'; }, 2000); }
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    showToast('✅ 已复制，可直接发给 AI');
   }).catch(() => {
     const el = document.createElement('textarea');
-    el.value = text;
+    el.value = pre.textContent;
     document.body.appendChild(el);
     el.select();
     document.execCommand('copy');
     document.body.removeChild(el);
-    showToast('已复制');
+    showToast('✅ 已复制');
   });
+}
+
+async function downloadAiExportJson() {
+  const qdd = getCurrentQdd();
+  if (!qdd) return;
+
+  showToast('⏳ 正在处理图片...');
+
+  // 深拷贝并解析所有 idb: 图片为真实 base64
+  const full = JSON.parse(JSON.stringify(qdd));
+  for (const s of (full.steps || [])) {
+    const resolved = getResolvedImageUrl(s.imageUrl || '');
+    s.imageUrl = resolved;
+    s.images   = resolved ? [resolved] : [];
+  }
+
+  const json = JSON.stringify(full, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${(qdd.title || 'QDD').replace(/[/\\:*?"<>|]/g, '_')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ 已下载');
+}
+
+// 从文件读取 JSON 填入 AI 导入的 textarea（含图片的完整备份也支持）
+function loadAiImportFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const textarea = document.getElementById('ai-json-input');
+    if (textarea) {
+      textarea.value = e.target.result;
+      showToast('✅ 文件已加载，点击「导入」继续');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
 }
