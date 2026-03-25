@@ -122,85 +122,91 @@ function confirmImport() {
   showToast(`✅ 成功导入 ${newSteps.length} 个环节`);
 }
 
-// ===== Export PNG =====
-// ===== Export helpers =====
+// ===== Export PNG / PDF =====
+
 /**
- * 对目标节点截图。
- * 做法：临时把 preview-area 和其滚动祖先的 overflow 解除，截完再还原，
- * 避免 overflow:auto 截图偏移 和 flex height:100% 高度塌陷问题。
+ * 截图核心：精确截取 target 元素，与屏幕预览完全一致。
+ *
+ * 策略：
+ * 1. 等所有图片加载完毕
+ * 2. 临时解除所有祖先的 overflow 限制，让 html2canvas 能渲染完整内容
+ * 3. 截 document.body，用 target 相对于文档的绝对偏移作为裁切区域
+ * 4. 截完后还原 overflow
  */
 async function _captureNode(target, scale) {
+  // 等图片加载完成
+  await Promise.all(
+    Array.from(target.querySelectorAll('img')).map(img =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise(r => { img.onload = r; img.onerror = r; })
+    )
+  );
+
+  // 收集并临时解除所有祖先（含 target 自身）的 overflow 限制
+  const overflowFixed = [];
+  let el = target;
+  while (el && el !== document.documentElement) {
+    const cs = getComputedStyle(el);
+    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+      overflowFixed.push({
+        el,
+        overflow:  el.style.overflow,
+        overflowX: el.style.overflowX,
+        overflowY: el.style.overflowY,
+      });
+      el.style.overflow  = 'visible';
+      el.style.overflowX = 'visible';
+      el.style.overflowY = 'visible';
+    }
+    el = el.parentElement;
+  }
+
+  // 等浏览器重新布局后再量尺寸
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
+
+  // target 相对于文档左上角的绝对偏移
+  // 用 scrollWidth/scrollHeight 获取完整内容尺寸（包含超出滚动区的部分）
+  const rect = target.getBoundingClientRect();
+  const absX = Math.round(rect.left + window.scrollX);
+  const absY = Math.round(rect.top  + window.scrollY);
+  const W    = Math.ceil(target.scrollWidth);
+  const H    = Math.ceil(target.scrollHeight);
+
   const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
     .backgroundColor || '#ffffff';
 
-  // 等待所有图片加载完毕
-  const imgs = Array.from(target.querySelectorAll('img'));
-  await Promise.all(imgs.map(img =>
-    img.complete ? Promise.resolve() : new Promise(r => {
-      img.addEventListener('load',  r, { once: true });
-      img.addEventListener('error', r, { once: true });
-    })
-  ));
-  await new Promise(r => requestAnimationFrame(r));
-
-  // 快照每个元素的当前实际像素尺寸（在预览中真实渲染的值）
-  const allNodes = [target, ...target.querySelectorAll('*')];
-  const sizeSnapshot = allNodes.map(node => {
-    const r = node.getBoundingClientRect();
-    return { node, width: r.width, height: r.height };
-  });
-
-  const W = target.scrollWidth;
-  const H = target.scrollHeight;
-
+  let canvas;
   try {
-    const canvas = await html2canvas(target, {
+    canvas = await html2canvas(document.body, {
       backgroundColor: bgColor,
       scale,
-      useCORS: true,
-      allowTaint: true,
-      scrollX: -window.scrollX,
-      scrollY: -window.scrollY,
-      x: 0,
-      y: 0,
-      width:  W,
-      height: H,
-      windowWidth:  W,
-      windowHeight: H,
-      logging: false,
-      // onclone：在克隆的 DOM 上把每个节点的宽高锁死为预览时的真实值
-      // 这样 html2canvas 重新布局时不会因 windowWidth 变化导致列宽改变
-      onclone(clonedDoc, clonedTarget) {
-        const clonedAll = [clonedTarget, ...clonedTarget.querySelectorAll('*')];
-        clonedAll.forEach((clonedNode, i) => {
-          const snap = sizeSnapshot[i];
-          if (!snap || snap.width === 0 || snap.height === 0) return;
-          // 只锁定有意义的元素（排除纯文本容器避免文字溢出）
-          const tag = clonedNode.tagName;
-          if (tag === 'SPAN' || tag === 'P' || tag === 'A') return;
-          clonedNode.style.width  = snap.width  + 'px';
-          clonedNode.style.height = snap.height + 'px';
-          clonedNode.style.flexShrink = '0';
-          clonedNode.style.flexGrow   = '0';
-          clonedNode.style.minWidth   = snap.width  + 'px';
-          clonedNode.style.minHeight  = snap.height + 'px';
-          clonedNode.style.maxWidth   = snap.width  + 'px';
-          clonedNode.style.maxHeight  = snap.height + 'px';
-          clonedNode.style.boxSizing  = 'border-box';
-          clonedNode.style.overflow   = 'visible';
-        });
-      },
+      useCORS:     true,
+      allowTaint:  true,
+      x:           absX,
+      y:           absY,
+      width:       W,
+      height:      H,
+      windowWidth:  document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight,
+      scrollX:     0,
+      scrollY:     0,
+      logging:     false,
     });
-    return canvas;
   } finally {
-    // 无需还原——onclone 操作的是克隆 DOM，原始 DOM 未被修改
+    overflowFixed.forEach(({ el, overflow, overflowX, overflowY }) => {
+      el.style.overflow  = overflow;
+      el.style.overflowX = overflowX;
+      el.style.overflowY = overflowY;
+    });
   }
+  return canvas;
 }
 
 async function exportPng() {
   showToast('🖼️ 正在生成图片...');
-  const previewCanvas = document.getElementById('preview-canvas');
-  const target = previewCanvas && previewCanvas.firstElementChild;
+  const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
   const titleInput = document.getElementById('questTitle');
   try {
@@ -212,31 +218,33 @@ async function exportPng() {
     showToast('✅ PNG 已导出');
   } catch (e) {
     showToast('❌ 导出失败：' + e.message);
+    console.error(e);
   }
 }
 
-// ===== Export PDF =====
 async function exportPdf() {
   showToast('📄 正在生成PDF...');
-  const previewCanvas = document.getElementById('preview-canvas');
-  const target = previewCanvas && previewCanvas.firstElementChild;
+  const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
   const titleInput = document.getElementById('questTitle');
   try {
-    const canvas = await _captureNode(target, 1.5);
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const canvas = await _captureNode(target, 2);
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const { jsPDF } = window.jspdf;
-    const pw = canvas.width;
-    const ph = canvas.height;
-    const pdfScale = 0.264583;
-    const pdfW = pw * pdfScale;
-    const pdfH = ph * pdfScale;
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pdfW, pdfH] });
+    // canvas 尺寸（px） → pt（1pt = 1px @ 96dpi，jsPDF pt 单位）
+    const pdfW = canvas.width  * 0.75;
+    const pdfH = canvas.height * 0.75;
+    const pdf  = new jsPDF({
+      orientation: pdfW >= pdfH ? 'landscape' : 'portrait',
+      unit:   'pt',
+      format: [pdfW, pdfH],
+    });
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
     pdf.save(`QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`);
     showToast('✅ PDF 已导出');
   } catch (e) {
     showToast('❌ 导出失败：' + e.message);
+    console.error(e);
   }
 }
 
