@@ -287,11 +287,9 @@ function doAiImport() {
       }
     });
     syncStateFromQdd(currentQdd);
-    saveAllQdds();
-    renderAll();
     const msg = `✅ 已更新 ${matched} 个环节${added > 0 ? `，追加 ${added} 个新环节` : ''}`;
     setAiFeedback(msg, false);
-    showToast(msg);
+    _migrateImagesAndRefresh(msg);
 
   } else if (mode === 'add') {
     const currentQdd = getCurrentQdd();
@@ -300,12 +298,12 @@ function doAiImport() {
     const newSteps = (srcQdd.steps || []).map(s => normalizeAiStep(s));
     currentQdd.steps.push(...newSteps);
     syncStateFromQdd(currentQdd);
-    saveAllQdds();
-    renderAll();
-    setAiFeedback(`✅ 已追加 ${newSteps.length} 个环节到当前 QDD`, false);
-    showToast(`已追加 ${newSteps.length} 个环节`);
+    const msg = `✅ 已追加 ${newSteps.length} 个环节到当前 QDD`;
+    setAiFeedback(msg, false);
+    _migrateImagesAndRefresh(msg);
 
   } else {
+    // new QDD mode
     for (const raw of qdds) {
       const newQdd = {
         id: genId(),
@@ -314,12 +312,34 @@ function doAiImport() {
       };
       STORE.qdds.push(newQdd);
     }
-    saveAllQdds();
-    setAiFeedback(`✅ 已创建 ${qdds.length} 个新 QDD`, false);
-    showToast(`已导入 ${qdds.length} 个 QDD`);
+    const msg = `✅ 已导入 ${qdds.length} 个 QDD`;
+    setAiFeedback(msg, false);
+    _migrateImagesAndRefresh(msg, true);
+  }
+}
+
+/**
+ * 导入完成后统一收尾：
+ * 1. 把所有 base64 imageUrl 迁移进 IndexedDB（这样 localStorage 不会超限）
+ * 2. saveAllQdds()（此时 localStorage 只存 idb: key，很小）
+ * 3. 预热图片缓存，刷新界面
+ */
+async function _migrateImagesAndRefresh(successMsg, goHome = false) {
+  showToast('⏳ 正在处理图片...');
+  try {
+    await migrateAllImagesToDb(); // 把所有 base64 迁移进 IndexedDB
+    saveAllQdds();                // 重新保存（现在只含 idb: key，体积小）
+    await _preloadStepImages();   // 预热缓存
+  } catch (e) {
+    console.warn('[_migrateImagesAndRefresh]', e);
+  }
+  if (goHome) {
     closeAiImportPanel();
     showHomePage();
+  } else {
+    renderAll();
   }
+  showToast(successMsg);
 }
 
 function normalizeAiStep(raw) {
