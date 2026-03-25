@@ -118,16 +118,24 @@ function init() {
     return;
   }
 
-  // 迁移旧 base64 图片到 IndexedDB（静默后台执行）
+  // 先立即渲染页面（不等迁移），让用户马上看到内容
+  if (prefs.lastView === 'editor' && prefs.lastQdd) {
+    const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
+    if (qdd) {
+      openQdd(qdd.id);
+    } else {
+      showHomePage();
+    }
+  } else {
+    showHomePage();
+  }
+
+  // 后台静默：迁移旧 base64 图片到 IndexedDB，完成后刷新图片显示
   migrateAllImagesToDb().then(() => {
-    // 迁移完成后预热图片缓存，再决定显示哪个页面
     return _preloadStepImages();
   }).then(() => {
-    if (prefs.lastView === 'editor' && prefs.lastQdd) {
-      const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
-      if (qdd) { openQdd(qdd.id); return; }
-    }
-    showHomePage();
+    // 若当前在编辑器，刷新预览以显示迁移后的图片
+    if (STATE.view === 'editor') renderPreview();
   });
 }
 
