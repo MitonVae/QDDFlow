@@ -121,7 +121,9 @@ function init() {
     return;
   }
 
-  // 直接渲染，不等任何异步操作
+  // 后台静默迁移旧 base64 → IndexedDB（不阻塞页面渲染）
+  migrateAllImagesToDb().catch(() => {});
+
   if (prefs.lastView === 'editor' && prefs.lastQdd) {
     const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
     if (qdd) { openQdd(qdd.id); return; }

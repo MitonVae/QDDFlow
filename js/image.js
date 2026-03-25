@@ -1,33 +1,67 @@
-// ===== 图片核心：读取文件 → base64 → 存入 step → 刷新 =====
+// ===== 图片核心：读取文件 → base64 → 存 IndexedDB → 存入 step → 刷新 =====
 
+// 内存缓存：idb:key → dataUrl（会话期间有效，刷新后由 _preloadStepImages 重填）
+const _imgUrlCache = new Map();
+
+/** 根据 imageUrl 返回可直接用于 <img src> 的 DataURL */
+function getResolvedImageUrl(imageUrl) {
+  if (!imageUrl || imageUrl === '__img__') return '';
+  if (imageUrl.startsWith('idb:')) return _imgUrlCache.get(imageUrl) || '';
+  return imageUrl; // 兼容旧版直存的 base64
+}
+
+/**
+ * 预热图片缓存：把当前 QDD 所有 idb: key 从 IndexedDB 读出来存入 _imgUrlCache。
+ * 必须在 renderAll/renderPreview 之前 await。
+ */
+async function _preloadStepImages() {
+  const steps = STATE.steps || [];
+  await Promise.all(steps.map(async step => {
+    const key = step.imageUrl;
+    if (key && key.startsWith('idb:') && !_imgUrlCache.has(key)) {
+      try {
+        const url = await loadImageFromDb(key);
+        if (url) _imgUrlCache.set(key, url);
+      } catch (e) { /* ignore */ }
+    }
+  }));
+}
+
+/** 读取文件 → 存入 IndexedDB → 更新 step → 刷新渲染 */
 function saveImageToStep(file, stepId) {
   if (!file || !file.type.startsWith('image/')) {
     showToast('❌ 请选择图片文件');
     return;
   }
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     const step = STATE.steps.find(s => s.id === stepId);
     if (!step) return;
-    step.imageUrl = ev.target.result;
-    step.images   = [step.imageUrl];
-    saveAllQdds();
+    const dataUrl = ev.target.result;
+
+    // 删旧图
+    if (step.imageUrl && step.imageUrl.startsWith('idb:')) {
+      _imgUrlCache.delete(step.imageUrl);
+      deleteImageFromDb(step.imageUrl).catch(() => {});
+    }
+
+    // 存新图到 IndexedDB，得到引用 key
+    let imgKey = dataUrl; // 降级：IndexedDB 失败时直存 base64
+    try {
+      imgKey = await saveImageToDb(dataUrl);
+      _imgUrlCache.set(imgKey, dataUrl); // 同步写入缓存
+    } catch (e) {
+      console.warn('[saveImageToStep] IndexedDB 存储失败，降级为直存', e);
+    }
+
+    step.imageUrl = imgKey;
+    step.images   = [imgKey];
+    saveAllQdds(); // localStorage 只存 idb: key（几十字节），不会超限
+
     renderPreview();
     if (_propPanelStepId === stepId) renderStepPanel();
   };
   reader.readAsDataURL(file);
-}
-
-/** 返回可用于 <img src> 的 URL（兼容旧 idb: 引用，直接返回空） */
-function getResolvedImageUrl(imageUrl) {
-  if (!imageUrl) return '';
-  if (imageUrl.startsWith('idb:') || imageUrl === '__img__') return '';
-  return imageUrl;
-}
-
-/** 无操作，保持调用兼容 */
-function _preloadStepImages() {
-  return Promise.resolve();
 }
 
 // ===== 点击选文件 =====
