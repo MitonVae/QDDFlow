@@ -1,24 +1,45 @@
-﻿  return `
+// ===== View: Home Page =====
+function showHomePage() {
+  // Save current QDD state before leaving editor
+  if (STATE.currentQddId) {
+    const qdd = getCurrentQdd();
+    if (qdd) syncQddFromState(qdd);
+    saveAllQdds();
+  }
+  STATE.currentQddId = null;
+  STATE.view = 'home';
+  savePrefs(); // persist view=home so refresh stays on home
+
+  document.getElementById('app').innerHTML = buildHomePageHTML();
+  document.getElementById('newQddBtn').addEventListener('click', createNewQdd);
+  // Bind theme select for home page
+  const $ts = document.getElementById('themeSelect');
+  if ($ts) { $ts.value = STATE.theme; $ts.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); }); }
+  renderQddCards();
+}
+
+function buildHomePageHTML() {
+  return `
     <header id="toolbar">
       <div class="toolbar-left">
         <span class="app-title">QDD Flow</span>
       </div>
       <div class="toolbar-center"></div>
       <div class="toolbar-right">
-        <label class="tb-btn" title="涓婚">
-          <span>涓婚</span>
+        <label class="tb-btn" title="主题">
+          <span>主题</span>
           <select id="themeSelect">
-            <option value="light">鈽€锔?浜壊</option>
-            <option value="dark">馃寵 娣辫壊</option>
-            <option value="cyber">馃挏 璧涘崥</option>
+            <option value="light">☀️ 亮色</option>
+            <option value="dark">🌙 深色</option>
+            <option value="cyber">💜 赛博</option>
           </select>
         </label>
-        <button class="tb-btn" id="newQddBtn">锛?鏂板缓 QDD</button>
+        <button class="tb-btn" id="newQddBtn">＋ 新建 QDD</button>
       </div>
     </header>
     <div id="home-page">
       <div class="home-header">
-        <h2>鎵€鏈?QDD</h2>
+        <h2>所有 QDD</h2>
       </div>
       <div id="qdd-card-list"></div>
     </div>
@@ -29,15 +50,15 @@ function renderQddCards() {
   const container = document.getElementById('qdd-card-list');
   if (!container) return;
   if (STORE.qdds.length === 0) {
-    container.innerHTML = '<p class="home-empty">杩樻病鏈?QDD锛岀偣鍑诲彸涓婅銆岋紜 鏂板缓 QDD銆嶅紑濮?/p>';
+    container.innerHTML = '<p class="home-empty">还没有 QDD，点击右上角「＋ 新建 QDD」开始</p>';
     return;
   }
   container.innerHTML = STORE.qdds.map(qdd => `
     <div class="qdd-card" data-id="${qdd.id}">
       <span class="qdd-card-title">${esc(qdd.title)}</span>
       <div class="qdd-card-actions">
-        <button class="qdd-card-rename" onclick="renameQdd('${qdd.id}')" title="閲嶅懡鍚?>鉁忥笍</button>
-        <button class="qdd-card-delete" onclick="deleteQdd('${qdd.id}')" title="鍒犻櫎">馃棏锔?/button>
+        <button class="qdd-card-rename" onclick="renameQdd('${qdd.id}')" title="重命名">✏️</button>
+        <button class="qdd-card-delete" onclick="deleteQdd('${qdd.id}')" title="删除">🗑️</button>
       </div>
     </div>
   `).join('');
@@ -51,9 +72,9 @@ function renderQddCards() {
 }
 
 function createNewQdd() {
-  const title = prompt('璇疯緭鍏?QDD 鍚嶇О锛?, '鏂板缓 QDD');
+  const title = prompt('请输入 QDD 名称：', '新建 QDD');
   if (!title) return;
-  const qdd = { id: genId(), title: title.trim() || '鏂板缓 QDD', steps: [] };
+  const qdd = { id: genId(), title: title.trim() || '新建 QDD', steps: [] };
   STORE.qdds.push(qdd);
   saveAllQdds();
   openQdd(qdd.id);
@@ -62,7 +83,7 @@ function createNewQdd() {
 function renameQdd(id) {
   const qdd = STORE.qdds.find(q => q.id === id);
   if (!qdd) return;
-  const newTitle = prompt('閲嶅懡鍚?QDD锛?, qdd.title);
+  const newTitle = prompt('重命名 QDD：', qdd.title);
   if (newTitle === null) return;
   qdd.title = newTitle.trim() || qdd.title;
   saveAllQdds();
@@ -70,11 +91,11 @@ function renameQdd(id) {
 }
 
 function deleteQdd(id) {
-  if (!confirm('纭鍒犻櫎姝?QDD锛熸鎿嶄綔涓嶅彲鎭㈠銆?)) return;
+  if (!confirm('确认删除此 QDD？此操作不可恢复。')) return;
   STORE.qdds = STORE.qdds.filter(q => q.id !== id);
   saveAllQdds();
   renderQddCards();
-  showToast('QDD 宸插垹闄?);
+  showToast('QDD 已删除');
 }
 
 function openQdd(id) {
@@ -95,25 +116,3 @@ function openQdd(id) {
   bindEditorEvents();
   renderAll();
 }
-
-function buildEditorPageHTML() {
-  return `
-    <header id="toolbar">
-      <div class="toolbar-left">
-        <span class="app-title">QDD Flow</span>
-        <button class="tb-btn tb-back-btn" id="backToHomeBtn">鈫?杩斿洖</button>
-        <span class="quest-name-wrap">
-          <input type="text" id="questTitle" placeholder="浠诲姟鍚嶇О..." value="${esc(STATE.questTitle)}">
-        </span>
-      </div>
-      <div class="toolbar-center">
-        <label class="tb-btn" title="甯冨眬鍒囨崲">
-          <span>甯冨眬</span>
-          <select id="layoutSelect">
-            <option value="table">馃搵 琛ㄦ牸寮?/option>
-            <option value="timeline">馃幆 鏃堕棿杞村紡</option>
-          </select>
-        </label>
-        <label class="tb-btn" title="涓婚">
-          <span>涓婚</span>
-          <select id="themeSelect">

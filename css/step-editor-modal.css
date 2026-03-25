@@ -1,4 +1,4 @@
-﻿/* ===== Step Editor Modal / Inline ===== */
+/* ===== Step Editor Modal / Inline ===== */
 #step-editor {
   position: fixed;
   top: 0;
@@ -257,4 +257,3 @@
 .btn-cancel:hover {
   background: var(--btn-hover);
 }
-

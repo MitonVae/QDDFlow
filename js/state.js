@@ -1,4 +1,8 @@
-﻿  colWidth: 'qdd_colwidth',
+// ===== Persistence =====
+const STORAGE_KEYS = {
+  layout:   'qdd_layout',
+  theme:    'qdd_theme',
+  colWidth: 'qdd_colwidth',
   qdds:     'qdd_all_qdds',
   lastQdd:  'qdd_last_id',
   lastView: 'qdd_last_view', // 'home' | 'editor'
@@ -51,7 +55,7 @@ function pushHistory() {
 }
 
 function undoHistory() {
-  if (HISTORY.stack.length === 0) { showToast('娌℃湁鍙挙鍥炵殑鎿嶄綔'); return; }
+  if (HISTORY.stack.length === 0) { showToast('没有可撤回的操作'); return; }
   // Save current state to redo stack
   HISTORY.future.push(JSON.stringify(STORE.qdds));
   const snap = HISTORY.stack.pop();
@@ -59,18 +63,18 @@ function undoHistory() {
   restoreSnapshot(snap);
   HISTORY._skipNext = false;
   updateUndoRedoUI();
-  showToast('鉁?宸叉挙鍥?);
+  showToast('✓ 已撤回');
 }
 
 function redoHistory() {
-  if (HISTORY.future.length === 0) { showToast('娌℃湁鍙噸鍋氱殑鎿嶄綔'); return; }
+  if (HISTORY.future.length === 0) { showToast('没有可重做的操作'); return; }
   HISTORY.stack.push(JSON.stringify(STORE.qdds));
   const snap = HISTORY.future.pop();
   HISTORY._skipNext = true;
   restoreSnapshot(snap);
   HISTORY._skipNext = false;
   updateUndoRedoUI();
-  showToast('鉁?宸查噸鍋?);
+  showToast('✓ 已重做');
 }
 
 function restoreSnapshot(snapJson) {
@@ -99,8 +103,8 @@ function updateUndoRedoUI() {
   const $redo = document.getElementById('redoBtn');
   if ($undo) $undo.disabled = HISTORY.stack.length === 0;
   if ($redo) $redo.disabled = HISTORY.future.length === 0;
-  if ($undo) $undo.title = `鎾ゅ洖 (Ctrl+Z)  [${HISTORY.stack.length}姝`;
-  if ($redo) $redo.title = `閲嶅仛 (Ctrl+Y)  [${HISTORY.future.length}姝`;
+  if ($undo) $undo.title = `撤回 (Ctrl+Z)  [${HISTORY.stack.length}步]`;
+  if ($redo) $redo.title = `重做 (Ctrl+Y)  [${HISTORY.future.length}步]`;
 }
 
 // Debounced history push: groups rapid consecutive edits into one undo step
@@ -139,7 +143,7 @@ const STATE = {
   layout: 'table', // 'table' | 'timeline'
   theme: 'light',
   colWidth: 200, // timeline column width in px
-  questTitle: '涓荤嚎浠诲姟 路 绀轰緥',
+  questTitle: '主线任务 · 示例',
   currentQddId: null, // null = on home page
   editingStepId: null,
   importData: null,
@@ -164,8 +168,3 @@ function getStepColor(step, index) {
 function genId() {
   return 'step_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 }
-
-// ===== DOM Refs =====
-const $stepsList = document.getElementById('steps-list');
-const $previewCanvas = document.getElementById('preview-canvas');
-const $stepCount = document.getElementById('step-count');

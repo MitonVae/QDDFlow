@@ -1,18 +1,17 @@
-﻿// ===== Task Type Config =====
+// ===== Task Type Config =====
 const TASK_TYPES = [
-  { value: '',      label: '鈥旓紙鏈瀹氾級', color: null },
-  { value: 'PUZ',   label: 'PUZ 鐜╂硶',   color: '#7c6af7' }, // 绱?  { value: 'BAT',   label: 'BAT 鎴樻枟',   color: '#06d6a0' }, // 缁?  { value: 'NAV',   label: 'NAV 璺戝浘',   color: '#ffd166' }, // 榛?  { value: 'STORY', label: '鍓ф儏',        color: '#8e9aaf' }, // 鐏?];
+  { value: '',      label: '—（未设定）', color: null },
+  { value: 'PUZ',   label: 'PUZ 玩法',   color: '#7c6af7' }, // 紫
+  { value: 'BAT',   label: 'BAT 战斗',   color: '#06d6a0' }, // 绿
+  { value: 'NAV',   label: 'NAV 跑图',   color: '#ffd166' }, // 黄
+  { value: 'STORY', label: '剧情',        color: '#8e9aaf' }, // 灰
+];
 const TASK_TYPE_MAP = Object.fromEntries(TASK_TYPES.filter(t => t.value).map(t => [t.value, t]));
 
 const TRIGGER_OPTIONS = [
-  'Room瑙﹀彂',
-  '鎺ョ画鑷姩瑙﹀彂',
-  '鍓ф儏瑙﹀彂',
-  '鐜╁閫夋嫨',
-  '鎺ョ画',
+  'Room触发',
+  '接续自动触发',
+  '剧情触发',
+  '玩家选择',
+  '接续',
 ];
-
-// ===== Persistence =====
-const STORAGE_KEYS = {
-  layout:   'qdd_layout',
-  theme:    'qdd_theme',

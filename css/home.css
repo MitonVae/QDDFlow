@@ -1,4 +1,4 @@
-﻿/* ===== Home Page ===== */
+/* ===== Home Page ===== */
 #home-page {
   flex: 1;
   overflow-y: auto;
@@ -82,4 +82,3 @@
   opacity: 1;
   background: #ff6b6b22;
 }
-

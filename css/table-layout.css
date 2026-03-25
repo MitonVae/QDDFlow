@@ -1,4 +1,4 @@
-﻿/* ===== TABLE LAYOUT ===== */
+/* ===== TABLE LAYOUT ===== */
 .table-wrap {
   display: flex;
   flex-direction: column;
@@ -45,12 +45,12 @@
   transform: scale(0.96);
 }
 
-/* 鈹€鈹€ Table scroll wrapper 鈹€鈹€ */
+/* ── Table scroll wrapper ── */
 .qt-scroll {
   overflow-x: auto;
 }
 
-/* 鈹€鈹€ Outer table: one <td> per step, side by side 鈹€鈹€ */
+/* ── Outer table: one <td> per step, side by side ── */
 .qt-table {
   border-collapse: collapse;
   border: 1px solid #000;
@@ -66,7 +66,7 @@
   vertical-align: top;
 }
 
-/* 鈹€鈹€ Step column cell 鈹€鈹€ */
+/* ── Step column cell ── */
 .qt-step-cell {
   min-width: 200px;
   width: 240px;
@@ -81,7 +81,7 @@
   height: 100%;
 }
 
-/* 鈹€鈹€ Colored title header 鈹€鈹€ */
+/* ── Colored title header ── */
 .qt-col-header {
   padding: 10px 12px 8px;
   text-align: center;
@@ -113,7 +113,7 @@
   border-radius: 3px;
 }
 
-/* 鈹€鈹€ Task Type Badge (inline in header) 鈹€鈹€ */
+/* ── Task Type Badge (inline in header) ── */
 .qt-type-badge {
   display: inline-block;
   margin-top: 5px;
@@ -164,7 +164,7 @@
   user-select: none;
 }
 
-/* 鈹€鈹€ Inline Type Dropdown 鈹€鈹€ */
+/* ── Inline Type Dropdown ── */
 .type-dropdown-menu {
   position: fixed;
   z-index: 9999;
@@ -221,7 +221,7 @@
   opacity: 0.4;
 }
 
-/* 鈹€鈹€ Image block 鈹€鈹€ */
+/* ── Image block ── */
 .qt-col-img {
   border-bottom: 1px solid #000;
   flex-shrink: 0;
@@ -244,7 +244,7 @@
   color: var(--text-muted);
 }
 
-/* Multi-image wrap in table layout 鈥?vertical stack, images fill column width */
+/* Multi-image wrap in table layout — vertical stack, images fill column width */
 .qt-img-multi-wrap {
   display: flex;
   flex-direction: column;  /* vertical stack */
@@ -286,7 +286,7 @@
   display: block;
 }
 
-/* 鈹€鈹€ Nested fields table: 2-col [label | value] 鈹€鈹€ */
+/* ── Nested fields table: 2-col [label | value] ── */
 .qt-fields-table {
   width: 100%;
   border-collapse: collapse;
@@ -372,7 +372,7 @@
   flex-shrink: 0;
 }
 
-/* 鈹€鈹€ Inline image zone (replaces qt-img-drop) 鈹€鈹€ */
+/* ── Inline image zone (replaces qt-img-drop) ── */
 .qt-img-zone {
   position: relative;
   outline: none;
@@ -449,7 +449,7 @@
   pointer-events: none;
 }
 
-/* 鈹€鈹€ Image Preview Modal 鈹€鈹€ */
+/* ── Image Preview Modal ── */
 #img-preview-modal {
   position: fixed;
   inset: 0;
@@ -494,7 +494,7 @@
   pointer-events: none;
 }
 
-/* 鈹€鈹€ Description block 鈹€鈹€ */
+/* ── Description block ── */
 .qt-col-desc {
   padding: 8px 10px;
   font-size: 13px;
@@ -513,8 +513,7 @@
 }
 
 .qt-col-desc:empty::before {
-  content: '锛堟殏鏃犳弿杩帮級';
+  content: '（暂无描述）';
   color: var(--text-muted);
   pointer-events: none;
 }
-

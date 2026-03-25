@@ -1,4 +1,4 @@
-﻿/* ===== Preview Area ===== */
+/* ===== Preview Area ===== */
 #preview-area {
   flex: 1;
   overflow: auto;
@@ -53,4 +53,3 @@
 .preview-empty p {
   font-size: 14px;
 }
-

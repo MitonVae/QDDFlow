@@ -1,4 +1,4 @@
-﻿/* ===== TIMELINE LAYOUT ===== */
+/* ===== TIMELINE LAYOUT ===== */
 .timeline-wrap {
   display: flex;
   flex-direction: column;
@@ -15,7 +15,7 @@
   letter-spacing: 1px;
 }
 
-/* 鈹€鈹€ Main CSS Grid: rows auto-align across all columns 鈹€鈹€ */
+/* ── Main CSS Grid: rows auto-align across all columns ── */
 .tl-grid {
   display: grid;
   /* grid-template-columns set inline per render */
@@ -26,7 +26,7 @@
   min-width: max-content;
 }
 
-/* 鈹€鈹€ Title row (row 1) 鈹€鈹€ */
+/* ── Title row (row 1) ── */
 .tl-title-cell {
   display: flex;
   align-items: center;
@@ -71,7 +71,7 @@
   flex-shrink: 0;
 }
 
-/* 鈹€鈹€ Image row (row 2) 鈹€鈹€ */
+/* ── Image row (row 2) ── */
 .tl-img-cell {
   padding: 0 6px 10px;
 }
@@ -116,7 +116,7 @@
   padding: 0 4px;
 }
 
-/* 鈹€鈹€ Meta row (row 3) 鈹€鈹€ */
+/* ── Meta row (row 3) ── */
 .tl-meta-cell {
   padding: 0 6px 8px;
   vertical-align: top;
@@ -148,7 +148,7 @@
   font-style: italic;
 }
 
-/* 鈹€鈹€ Desc row (row 4) 鈹€鈹€ */
+/* ── Desc row (row 4) ── */
 .tl-desc-cell {
   padding: 0 6px;
   vertical-align: top;
@@ -178,4 +178,3 @@ body.theme-dark .tl-note {
   background: #332700;
   color: #ffe082;
 }
-

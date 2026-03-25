@@ -1,4 +1,8 @@
-﻿  if ($themeSelect) $themeSelect.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); });
+// ===== Global Events (bound once) =====
+function bindGlobalEvents() {
+  // Theme select (always in DOM)
+  const $themeSelect = document.getElementById('themeSelect');
+  if ($themeSelect) $themeSelect.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); });
 
   // Close modals on backdrop click
   document.getElementById('step-editor').addEventListener('click', e => {
@@ -26,7 +30,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       saveAllQdds();
-      showToast('鉁?宸蹭繚瀛?);
+      showToast('✓ 已保存');
     }
   });
 
@@ -50,7 +54,7 @@ function updateAutoSaveLabel(isoTs) {
   if (!el) return;
   if (isoTs) {
     const d = new Date(isoTs);
-    el.textContent = `鑷姩淇濆瓨 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    el.textContent = `自动保存 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
   } else {
     el.textContent = '';
   }
@@ -120,23 +124,40 @@ function bindEditorEvents() {
   if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
 }
 
-const THEME_ICONS = { light: '鈽€锔?, dark: '馃寵', cyber: '馃挏' };
+const THEME_ICONS = { light: '☀️', dark: '🌙', cyber: '💜' };
 
 function applyTheme(theme) {
   STATE.theme = theme;
   document.body.className = `theme-${theme}`;
   // Update theme icon in toolbar if present
   const icon = document.getElementById('theme-icon');
-  if (icon) icon.textContent = THEME_ICONS[theme] || '馃帹';
+  if (icon) icon.textContent = THEME_ICONS[theme] || '🎨';
   // Keep select in sync
   const sel = document.getElementById('themeSelect');
   if (sel) sel.value = theme;
 }
 
-// ===== AI Import Panel =====
-const AI_PROMPT_TEMPLATE = `浣犳槸涓€涓父鎴忕瓥鍒掑姪鐞嗭紝鎴戦渶瑕佷綘甯垜鎶婂墽鎯呭ぇ绾叉暣鐞嗘垚 QDD Flow 宸ュ叿鍙互鐩存帴瀵煎叆鐨?JSON 鏍煎紡銆?
-銆愯緭鍑烘牸寮忚鑼冦€?
-杈撳嚭涓€涓悎娉曠殑 JSON 瀵硅薄锛堝崟涓?QDD锛夛紝缁撴瀯濡備笅锛?
+// ===== Render All =====
+function renderAll() {
+  renderStepsList();
+  renderPreview();
+}
+
+// ===== Navigate preview to step =====
+function scrollPreviewToStep(stepId) {
+  // Use requestAnimationFrame to ensure DOM is ready after render
+  requestAnimationFrame(() => {
+    const scrollWrap = document.getElementById('preview-scroll-wrap');
+    if (!scrollWrap) return;
+
+    // Find the element with data-step-id in the preview canvas
+    // Table layout: qt-col-header, Timeline layout: tl-title-cell
+    const canvas = document.getElementById('preview-canvas');
+    if (!canvas) return;
+
+    let target =
+      canvas.querySelector(`.qt-col-header [data-step-id="${stepId}"]`)?.closest('.qt-step-cell') ||
+      canvas.querySelector(`.tl-title-cell [data-step-id="${stepId}"]`)?.closest('.tl-title-cell') ||
       canvas.querySelector(`[data-step-id="${stepId}"]`);
 
     if (!target) return;
@@ -167,14 +188,14 @@ function selectAllSteps() {
 }
 
 function batchDeleteSteps() {
-  if (_batchSelected.size === 0) { showToast('璇峰厛閫夋嫨鐜妭'); return; }
+  if (_batchSelected.size === 0) { showToast('请先选择环节'); return; }
   STATE.steps = STATE.steps.filter(s => !_batchSelected.has(s.id));
   if (_batchSelected.has(STATE.activeStepId)) STATE.activeStepId = null;
   _batchSelected.clear();
   _batchMode = false;
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   renderAll();
-  showToast('宸叉壒閲忓垹闄?);
+  showToast('已批量删除');
 }
 
 // ===== Render Steps List (Left Panel) =====
@@ -182,12 +203,12 @@ function renderStepsList() {
   const $stepCount = document.getElementById('step-count');
   const $stepsList = document.getElementById('steps-list');
   if (!$stepCount || !$stepsList) return;
-  $stepCount.textContent = `${STATE.steps.length} 涓幆鑺俙;
+  $stepCount.textContent = `${STATE.steps.length} 个环节`;
 
   // Batch toggle button in header
   const batchToggleBtn = document.getElementById('slBatchToggle');
   if (batchToggleBtn) {
-    batchToggleBtn.textContent = _batchMode ? '閫€鍑烘壒閲? : '鎵归噺鎿嶄綔';
+    batchToggleBtn.textContent = _batchMode ? '退出批量' : '批量操作';
     batchToggleBtn.classList.toggle('active', _batchMode);
   }
   // Batch action bar
@@ -210,7 +231,7 @@ function renderStepsList() {
       item.innerHTML = `
         <input type="checkbox" class="batch-cb" ${isChecked ? 'checked' : ''}>
         <span class="step-color-dot" style="background:${getStepColor(step, i)}"></span>
-        <span class="step-item-name">${esc(step.name || '鏈懡鍚嶇幆鑺?)}${typeLabel}</span>
+        <span class="step-item-name">${esc(step.name || '未命名环节')}${typeLabel}</span>
       `;
       item.addEventListener('click', e => {
         if (isChecked) _batchSelected.delete(step.id);
@@ -219,14 +240,14 @@ function renderStepsList() {
       });
     } else {
       item.innerHTML = `
-        <span class="step-drag-handle" title="鎷栨嫿鎺掑簭">鉅?/span>
+        <span class="step-drag-handle" title="拖拽排序">⠿</span>
         <span class="step-color-dot" style="background:${getStepColor(step, i)}"></span>
-        <span class="step-item-name">${esc(step.name || '鏈懡鍚嶇幆鑺?)}${typeLabel}</span>
+        <span class="step-item-name">${esc(step.name || '未命名环节')}${typeLabel}</span>
         <span class="step-item-actions">
-          <button title="缂栬緫" onclick="openStepEditor('${step.id}')">鉁忥笍</button>
-          <button title="涓婄Щ" onclick="moveStep('${step.id}', -1)">鈻?/button>
-          <button title="涓嬬Щ" onclick="moveStep('${step.id}', 1)">鈻?/button>
-          <button class="del-btn" title="鍒犻櫎" onclick="deleteStep('${step.id}')">馃棏</button>
+          <button title="编辑" onclick="openStepEditor('${step.id}')">✏️</button>
+          <button title="上移" onclick="moveStep('${step.id}', -1)">▲</button>
+          <button title="下移" onclick="moveStep('${step.id}', 1)">▼</button>
+          <button class="del-btn" title="删除" onclick="deleteStep('${step.id}')">🗑</button>
         </span>
       `;
       item.addEventListener('click', e => {
@@ -286,31 +307,31 @@ function deleteStep(id) {
   if (STATE.activeStepId === id) STATE.activeStepId = null;
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   renderAll();
-  showToast('鐜妭宸插垹闄?);
+  showToast('环节已删除');
 }
 
 // ===== Step Editor Modal =====
-function openStepEditor(id) {
-  STATE.editingStepId = id;
-  const step = id ? STATE.steps.find(s => s.id === id) : null;
-  const modal = document.getElementById('step-editor');
-  modal.classList.remove('hidden');
+// ===== Step Property Panel =====
+let _propPanelStepId = null;
 
-  const title = step ? `缂栬緫鐜妭锛?{step.name}` : '鏂板鐜妭';
-  const currentTaskType = step?.taskType || '';
-  // Color: use colorOverride if set, else derive from taskType, else preset
-  const defaultColor = currentTaskType && TASK_TYPE_MAP[currentTaskType]
-    ? TASK_TYPE_MAP[currentTaskType].color
-    : (PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length]);
-  const selectedColor = step?.colorOverride || step?.color || defaultColor;
+function openStepPanel(stepId) {
+  // Toggle: clicking same header again closes the panel
+  if (_propPanelStepId === stepId) {
+    closeStepPanel();
+    return;
+  }
+  _propPanelStepId = stepId;
+  STATE.activeStepId = stepId;
+  renderStepsList(); // highlight active in left list
 
-  const taskTypeOptionsHtml = TASK_TYPES.map(t =>
-    `<option value="${t.value}"${t.value === currentTaskType ? ' selected' : ''}>${t.label}</option>`
-  ).join('');
+  const panel = document.getElementById('step-prop-panel');
+  if (!panel) return;
+  panel.classList.remove('prop-panel-hidden');
+  renderStepPanel();
+}
 
-  const triggerOptionsHtml = ['', ...TRIGGER_OPTIONS].map(v =>
-    `<option value="${v}"${v === (step?.trigger||'') ? ' selected' : ''}>${v || '鈥?}</option>`
-  ).join('');
+function closeStepPanel() {
+  _propPanelStepId = null;
   const panel = document.getElementById('step-prop-panel');
   if (panel) panel.classList.add('prop-panel-hidden');
   // Remove active highlight
@@ -326,7 +347,7 @@ function renderStepPanel() {
   const step = STATE.steps.find(s => s.id === _propPanelStepId);
   if (!step) { closeStepPanel(); return; }
 
-  if (titleEl) titleEl.textContent = step.name || '鏈懡鍚嶇幆鑺?;
+  if (titleEl) titleEl.textContent = step.name || '未命名环节';
 
   // Ensure step has images array (backwards compat)
   if (!step.images) step.images = step.imageUrl ? [step.imageUrl] : [];
@@ -338,87 +359,89 @@ function renderStepPanel() {
 
   // Trigger options
   const triggerOpts = ['', ...TRIGGER_OPTIONS].map(v =>
-    `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '鈥?}</option>`
+    `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
   // Custom fields rows
   const cfRows = (step.customFields || []).map((f, fi) => `
     <div class="pp-cf-row" data-fi="${fi}">
-      <input class="pp-cf-key" type="text" placeholder="鍙傛暟鍚? value="${esc(f.key)}"
+      <input class="pp-cf-key" type="text" placeholder="参数名" value="${esc(f.key)}"
         onchange="updateCustomFieldKey('${step.id}',${fi},this.value)">
-      <input class="pp-cf-val" type="text" placeholder="鍙傛暟鍊? value="${esc(f.value)}"
+      <input class="pp-cf-val" type="text" placeholder="参数值" value="${esc(f.value)}"
         onchange="updateCustomFieldVal('${step.id}',${fi},this.value)">
-      <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="鍒犻櫎姝ゅ瓧娈?>脳</button>
+      <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="删除此字段">×</button>
     </div>`).join('');
 
   // Images list
   const imgItems = (step.images || []).map((url, ii) => `
     <div class="pp-img-item" data-ii="${ii}">
-      <img src="${esc(url)}" alt="鍥?{ii+1}" onclick="openImagePreview('${esc(url)}')">
-      <button class="pp-img-del" onclick="deletePanelImage('${step.id}',${ii})" title="鍒犻櫎">脳</button>
+      <img src="${esc(url)}" alt="图${ii+1}" onclick="openImagePreview('${esc(url)}')">
+      <button class="pp-img-del" onclick="deletePanelImage('${step.id}',${ii})" title="删除">×</button>
     </div>`).join('');
 
   body.innerHTML = `
     <div class="pp-section">
-      <label class="pp-label">鐜妭鍚嶇О</label>
+      <label class="pp-label">环节名称</label>
       <input class="pp-input" type="text" id="pp-name" value="${esc(step.name||'')}"
         oninput="savePanelField('${step.id}','name',this.value)">
     </div>
 
     <div class="pp-section pp-row2">
       <div>
-        <label class="pp-label">浠诲姟绫诲瀷</label>
+        <label class="pp-label">任务类型</label>
         <select class="pp-select" id="pp-tasktype"
           onchange="savePanelTaskType('${step.id}',this.value)">${taskTypeOpts}</select>
       </div>
       <div>
-        <label class="pp-label">瑙﹀彂鏂瑰紡</label>
+        <label class="pp-label">触发方式</label>
         <select class="pp-select" id="pp-trigger"
           onchange="savePanelField('${step.id}','trigger',this.value)">${triggerOpts}</select>
       </div>
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">浣嶇疆</label>
-      <input class="pp-input" type="text" id="pp-location" placeholder="濡傦細姝﹀悍澶фゼ路澶у巺"
+      <label class="pp-label">位置</label>
+      <input class="pp-input" type="text" id="pp-location" placeholder="如：武康大楼·大厅"
         value="${esc(step.location||'')}" oninput="savePanelField('${step.id}','location',this.value)">
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鍑哄満浜虹墿</label>
-      <input class="pp-input" type="text" id="pp-characters" placeholder="濡傦細鏌氭煚, 绋嬮啋"
+      <label class="pp-label">出场人物</label>
+      <input class="pp-input" type="text" id="pp-characters" placeholder="如：柚柠, 程醒"
         value="${esc(step.characters||'')}" oninput="savePanelField('${step.id}','characters',this.value)">
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鎻忚堪</label>
+      <label class="pp-label">描述</label>
       <textarea class="pp-textarea" id="pp-desc"
         oninput="savePanelField('${step.id}','desc',this.value)">${esc(step.desc||'')}</textarea>
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">閰嶅浘
-        <button class="pp-img-add-btn" onclick="addPanelImage('${step.id}')" title="浠庢枃浠堕€夋嫨">锛?娣诲姞</button>
+      <label class="pp-label">配图
+        <button class="pp-img-add-btn" onclick="addPanelImage('${step.id}')" title="从文件选择">＋ 添加</button>
       </label>
       <div class="pp-img-list" id="pp-img-list-${step.id}">
         ${imgItems}
         <div class="pp-img-drop-zone" data-step-id="${step.id}"
           onclick="addPanelImage('${step.id}')"
           tabindex="0"
-          title="鐐瑰嚮娣诲姞 / 鎷栧叆鍥剧墖 / Ctrl+V">
-          馃摲 鎷栧叆鎴栫偣鍑绘坊鍔?        </div>
+          title="点击添加 / 拖入图片 / Ctrl+V">
+          📷 拖入或点击添加
+        </div>
       </div>
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鑷畾涔夊瓧娈?        <button class="pp-cf-add-btn" onclick="addCustomField('${step.id}')">锛?娣诲姞瀛楁</button>
+      <label class="pp-label">自定义字段
+        <button class="pp-cf-add-btn" onclick="addCustomField('${step.id}')">＋ 添加字段</button>
       </label>
       <div class="pp-cf-list" id="pp-cf-list">${cfRows}</div>
     </div>
 
     <div class="pp-section pp-danger-zone">
-      <button class="pp-del-step-btn" onclick="deletePanelStep('${step.id}')">馃棏 鍒犻櫎姝ょ幆鑺?/button>
-      <button class="pp-add-step-btn" onclick="addStep()">锛?鍦ㄦ鍚庢柊澧炵幆鑺?/button>
+      <button class="pp-del-step-btn" onclick="deletePanelStep('${step.id}')">🗑 删除此环节</button>
+      <button class="pp-add-step-btn" onclick="addStep()">＋ 在此后新增环节</button>
     </div>
   `;
 
@@ -426,7 +449,7 @@ function renderStepPanel() {
   bindPanelImageDropZone(step.id);
 }
 
-// 鈹€鈹€ Panel field savers 鈹€鈹€
+// ── Panel field savers ──
 function savePanelField(stepId, field, val) {
   const step = STATE.steps.find(s => s.id === stepId);
   if (!step) return;
@@ -435,7 +458,7 @@ function savePanelField(stepId, field, val) {
   // Live-refresh preview without closing panel
   if (field === 'name') {
     const titleEl = document.getElementById('prop-panel-title');
-    if (titleEl) titleEl.textContent = val || '鏈懡鍚嶇幆鑺?;
+    if (titleEl) titleEl.textContent = val || '未命名环节';
     renderStepsList();
   }
   // Partial re-render: just re-render the preview (fast)
@@ -485,12 +508,12 @@ function deleteCustomField(stepId, fi) {
 }
 
 function deletePanelStep(stepId) {
-  if (!confirm('纭鍒犻櫎姝ょ幆鑺傦紵')) return;
+  if (!confirm('确认删除此环节？')) return;
   STATE.steps = STATE.steps.filter(s => s.id !== stepId);
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   closeStepPanel();
   renderAll();
-  showToast('鐜妭宸插垹闄?);
+  showToast('环节已删除');
 }
 
 function getPrevStepDefaults() {
@@ -509,7 +532,7 @@ function getPrevStepDefaults() {
 function addStep() {
   const defaults = getPrevStepDefaults();
   const newStep = {
-    id: genId(), name: '鏂扮幆鑺?,
+    id: genId(), name: '新环节',
     trigger:    defaults.trigger,
     location:   defaults.location,
     characters: defaults.characters,
@@ -533,7 +556,7 @@ function addMultipleSteps() {
   const defaults = getPrevStepDefaults();
   for (let i = 0; i < count; i++) {
     STATE.steps.push({
-      id: genId(), name: `鏂扮幆鑺俙,
+      id: genId(), name: `新环节`,
       trigger:    defaults.trigger,
       location:   defaults.location,
       characters: defaults.characters,
@@ -543,10 +566,10 @@ function addMultipleSteps() {
   }
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   renderAll();
-  showToast(`宸叉坊鍔?${count} 涓幆鑺俙);
+  showToast(`已添加 ${count} 个环节`);
 }
 
-// 鈹€鈹€ Panel image management 鈹€鈹€
+// ── Panel image management ──
 function addPanelImage(stepId) {
   _openImageFilePicker(stepId, 'panel');
 }
@@ -583,27 +606,3 @@ function bindPanelImageDropZone(stepId) {
   // Click also sets focus state (since onclick=addPanelImage steals focus before paste can fire)
   zone.addEventListener('mousedown', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
 }
-
-// ===== Trigger Inline Dropdown =====
-let _triggerDropdownCleanup = null;
-
-function toggleTriggerDropdown(event, stepId) {
-  event.stopPropagation();
-  // Close type dropdown too
-  closeTypeDropdown();
-  // Close existing trigger dropdown
-  if (_triggerDropdownCleanup) { _triggerDropdownCleanup(); return; }
-
-  const cell = event.currentTarget;
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
-
-  const dropdown = document.createElement('div');
-  dropdown.className = 'type-dropdown-menu';
-
-  // "Clear" option first
-  const allOptions = ['', ...TRIGGER_OPTIONS];
-  allOptions.forEach(opt => {
-    const item = document.createElement('div');
-    item.className = 'type-dropdown-item' + ((step.trigger || '') === opt ? ' active' : '');
-    item.textContent = opt || '鈥旓紙娓呴櫎锛?;

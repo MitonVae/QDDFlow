@@ -1,4 +1,4 @@
-﻿/* ===== Image Upload Area ===== */
+/* ===== Image Upload Area ===== */
 .image-upload-area {
   border: 2px dashed var(--border);
   border-radius: 10px;
@@ -77,4 +77,3 @@
   width: 100%;
   box-sizing: border-box;
 }
-

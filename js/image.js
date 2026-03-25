@@ -1,4 +1,27 @@
-﻿      if (document.body.contains(input)) document.body.removeChild(input);
+// ===== Inline Image Upload =====
+let _inlineImgTargetId = null;
+let _inlineImgTargetMode = 'preview'; // 'preview' | 'panel'
+
+/** 每次调用都创建全新的 file input，彻底避免 value 清空无效、change 不触发的问题 */
+function _openImageFilePicker(stepId, mode) {
+  _inlineImgTargetId = stepId;
+  _inlineImgTargetMode = mode;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (file) readInlineImageFile(file, _inlineImgTargetId);
+    if (document.body.contains(input)) document.body.removeChild(input);
+  });
+  // 用户取消选择时（focus 回到 window）也要销毁 input
+  window.addEventListener('focus', function onFocus() {
+    setTimeout(() => {
+      if (document.body.contains(input)) document.body.removeChild(input);
     }, 500);
     window.removeEventListener('focus', onFocus);
   }, { once: true });
@@ -43,7 +66,7 @@ function readInlineImageFile(file, stepId) {
 let _focusedImgZoneId = null;
 let _focusedImgZoneMode = null; // 'panel' | 'preview' | null
 
-// 鈹€鈹€ Image zone drag-drop: delegated on document (survives re-renders) 鈹€鈹€
+// ── Image zone drag-drop: delegated on document (survives re-renders) ──
 let _imgDragTargetZone = null;
 
 function _initImageZoneDelegation() {
@@ -89,7 +112,7 @@ function bindInlineImageZones(container) {
     const stepId = zone.dataset.stepId;
     if (!stepId) return;
 
-    // Single click 鈫?focus (for Ctrl+V paste)
+    // Single click → focus (for Ctrl+V paste)
     zone.addEventListener('click', e => {
       if (e.target.classList.contains('qt-img-replace-btn')) return;
       zone.focus();
@@ -109,7 +132,7 @@ function bindInlineImageZones(container) {
       }, 500);
     });
 
-    // Double click 鈫?enlarge (only when image exists)
+    // Double click → enlarge (only when image exists)
     zone.addEventListener('dblclick', e => {
       if (e.target.classList.contains('qt-img-replace-btn')) return;
       if (zone.classList.contains('qt-img-has-img')) {
@@ -149,8 +172,8 @@ function openImagePreview(src) {
   modal.id = 'img-preview-modal';
   modal.innerHTML = `
     <div class="img-preview-backdrop">
-      <img class="img-preview-img" src="${esc(src)}" alt="棰勮">
-      <div class="img-preview-hint">鐐瑰嚮浠绘剰澶勫叧闂?/div>
+      <img class="img-preview-img" src="${esc(src)}" alt="预览">
+      <div class="img-preview-hint">点击任意处关闭</div>
     </div>`;
   document.body.appendChild(modal);
 
@@ -222,35 +245,66 @@ function setStepTaskType(stepId, typeValue) {
   renderStepsList();
 }
 
-// ===== TIMELINE LAYOUT =====
-function renderTimelineLayout() {
-  const $previewCanvas = document.getElementById('preview-canvas');
-  if (!$previewCanvas) return;
-  const title = document.getElementById('questTitle')?.value || STATE.questTitle;
-  const steps = STATE.steps;
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
 
-  // Build grid column template:
-  // Each step gets a fixed-width col (controlled by colWidth slider),
-  // between steps there's a narrow arrow col
-  const colW = STATE.colWidth + 'px';
-  const gridCols = steps.map((_, i) =>
-    i < steps.length - 1 ? `${colW} 36px` : colW
-  ).join(' ');
+// ===== Helpers =====
+function esc(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+/** 同 esc()，但将 \n 也转换为 <br>，用于在 innerHTML / contenteditable 中保留换行 */
+function escWithBr(str) {
+  return esc(str).replace(/\n/g, '<br>');
+}
 
-  // 鈹€鈹€ Row 1: Title boxes + arrows 鈹€鈹€
-  const titleCells = steps.map((step, i) => {
-    const color = getStepColor(step, i);
-    const colIdx = i * 2 + 1; // 1-based grid column
-    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="鐐瑰嚮鍒囨崲浠诲姟绫诲瀷">${typeInfo ? typeInfo.label.split(' ')[0] : '锛嬬被鍨?}</span>`;
-    const arrowCell = i < steps.length - 1
-      ? `<div class="tl-arrow-cell" style="grid-column:${colIdx + 1};grid-row:1">鈫?/div>`
+// ===== Inject static modal shells =====
+document.body.insertAdjacentHTML('beforeend', `
+  <div id="step-editor" class="hidden"></div>
+  <div id="import-modal" class="hidden"></div>
+  <div id="toast"></div>
+`);
+
+// ===== Image Upload Helpers =====
+function triggerImageFileSelect() {
+  const fi = document.getElementById('ef-image-file');
+  if (fi) fi.click();
+}
+
+function handleImageFileChange(input) {
+  if (!input.files || !input.files[0]) return;
+  fileToBase64(input.files[0], setImagePreview);
+}
+
+function fileToBase64(file, callback) {
+  if (!file.type.startsWith('image/')) { showToast('❌ 请选择图片文件'); return; }
+  const reader = new FileReader();
+  reader.onload = e => callback(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+function setImagePreview(src) {
+  const preview = document.getElementById('ef-image-preview');
+  const urlInput = document.getElementById('ef-image');
+  const clearBtn = document.getElementById('ef-image-clear');
+  if (!preview) return;
+  preview.innerHTML = `<img src="${src}" alt="预览">`;
+  if (urlInput) urlInput.value = src;
+  if (clearBtn) clearBtn.style.display = '';
+}
 
 function clearImageField() {
   const preview = document.getElementById('ef-image-preview');
   const urlInput = document.getElementById('ef-image');
   const clearBtn = document.getElementById('ef-image-clear');
-  if (preview) preview.innerHTML = '<span class="image-upload-hint">馃摲 鎷栧叆鍥剧墖 / Ctrl+V 绮樿创 / 鐐瑰嚮閫夋嫨</span>';
+  if (preview) preview.innerHTML = '<span class="image-upload-hint">📷 拖入图片 / Ctrl+V 粘贴 / 点击选择</span>';
   if (urlInput) urlInput.value = '';
   if (clearBtn) clearBtn.style.display = 'none';
   const fi = document.getElementById('ef-image-file');
@@ -262,10 +316,10 @@ function handleImageUrlInput(val) {
   const clearBtn = document.getElementById('ef-image-clear');
   if (!preview) return;
   if (val.trim()) {
-    preview.innerHTML = `<img src="${esc(val.trim())}" alt="棰勮" onerror="this.parentElement.innerHTML='<span class=\\'image-upload-hint\\'>鍥剧墖鍔犺浇澶辫触锛岃妫€鏌ュ湴鍧€</span>'">`;
+    preview.innerHTML = `<img src="${esc(val.trim())}" alt="预览" onerror="this.parentElement.innerHTML='<span class=\\'image-upload-hint\\'>图片加载失败，请检查地址</span>'">`;
     if (clearBtn) clearBtn.style.display = '';
   } else {
-    preview.innerHTML = '<span class="image-upload-hint">馃摲 鎷栧叆鍥剧墖 / Ctrl+V 绮樿创 / 鐐瑰嚮閫夋嫨</span>';
+    preview.innerHTML = '<span class="image-upload-hint">📷 拖入图片 / Ctrl+V 粘贴 / 点击选择</span>';
     if (clearBtn) clearBtn.style.display = 'none';
   }
 }

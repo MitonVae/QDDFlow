@@ -1,4 +1,4 @@
-﻿/* ===== Toolbar / Top Bar ===== */
+/* ===== Toolbar / Top Bar ===== */
 #top-bar, #toolbar {
   background: var(--bg-toolbar);
   border-bottom: 1px solid var(--border);
@@ -27,7 +27,7 @@
   user-select: none;
 }
 
-/* 鈹€鈹€ Left section 鈹€鈹€ */
+/* ── Left section ── */
 .toolbar-left {
   display: flex;
   align-items: center;
@@ -72,7 +72,7 @@
 .tb-title-input:hover { background: var(--btn-hover); }
 .tb-title-input:focus { background: var(--btn-hover); }
 
-/* 鈹€鈹€ Center section 鈹€鈹€ */
+/* ── Center section ── */
 .toolbar-center {
   display: flex;
   align-items: center;
@@ -115,15 +115,15 @@
   /* Keep native dropdown but hide the arrow visually */
   appearance: none;
   -webkit-appearance: none;
-  /* Give room for our custom 鈻?arrow on the right */
+  /* Give room for our custom ▾ arrow on the right */
   padding-left: 0;
   padding-right: 18px;
   /* Let the select grow to fit its content */
   min-width: 48px;
 }
-/* Custom 鈻?arrow overlay */
+/* Custom ▾ arrow overlay */
 .tb-select-pill::after {
-  content: '鈻?;
+  content: '▾';
   font-size: 10px;
   color: var(--text-muted);
   position: absolute;
@@ -182,7 +182,7 @@
   transform: scale(1.2);
 }
 
-/* 鈹€鈹€ Right section 鈹€鈹€ */
+/* ── Right section ── */
 .toolbar-right {
   display: flex;
   align-items: center;
@@ -288,4 +288,3 @@
   padding: 0 4px;
   white-space: nowrap;
 }
-
