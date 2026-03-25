@@ -166,9 +166,10 @@ async function _captureNode(target, scale) {
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  // 4. 用 scrollWidth/scrollHeight 获取 target 完整内容尺寸（含未可见部分）
-  const W = target.scrollWidth;
-  const H = target.scrollHeight;
+  // 4. 用 getBoundingClientRect 获取 target 真实渲染尺寸
+  const rect = target.getBoundingClientRect();
+  const W = Math.ceil(rect.width);
+  const H = Math.ceil(rect.height);
 
   try {
     const canvas = await html2canvas(target, {
@@ -176,14 +177,14 @@ async function _captureNode(target, scale) {
       scale,
       useCORS: true,
       allowTaint: true,
-      scrollX: -window.scrollX,
-      scrollY: -window.scrollY,
+      scrollX: 0,
+      scrollY: 0,
       x: 0,
       y: 0,
       width:  W,
       height: H,
-      windowWidth:  W,
-      windowHeight: H,
+      windowWidth:  document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight,
       logging: false,
     });
     return canvas;

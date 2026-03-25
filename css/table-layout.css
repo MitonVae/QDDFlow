@@ -229,8 +229,7 @@
 
 .qt-col-img img {
   width: 100%;
-  height: auto;           /* 自然高度，保持原始比例 */
-  max-height: 160px;      /* 限制过高的图片 */
+  height: 120px;
   object-fit: contain;
   background: #555;
   display: block;
