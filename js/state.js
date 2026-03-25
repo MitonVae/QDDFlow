@@ -30,7 +30,16 @@ function savePrefs() {
 function loadAllQdds() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.qdds);
-    if (raw) return JSON.parse(raw);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // 清理占位符：__img__ 表示图片因配额问题未能持久化
+    data.forEach(q => {
+      (q.steps || []).forEach(s => {
+        if (s.imageUrl === '__img__') s.imageUrl = '';
+        if (Array.isArray(s.images)) s.images = s.images.filter(u => u !== '__img__');
+      });
+    });
+    return data;
   } catch(e) {}
   return null;
 }
@@ -116,9 +125,28 @@ function scheduleHistoryPush() {
 
 function saveAllQdds() {
   if (!HISTORY._skipNext) scheduleHistoryPush();
-  localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
+  try {
+    localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      // 图片 base64 太大，尝试不含图片地存一份（保留其他数据）
+      try {
+        const slim = STORE.qdds.map(q => ({
+          ...q,
+          steps: q.steps.map(s => ({ ...s, imageUrl: s.imageUrl ? '__img__' : '', images: [] }))
+        }));
+        localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(slim));
+        console.warn('[saveAllQdds] 图片数据过大，已以占位符形式保存（图片不会在刷新后保留）');
+        if (typeof showToast === 'function') showToast('⚠️ 图片较大，刷新后需重新上传');
+      } catch (e2) {
+        console.error('[saveAllQdds] localStorage 完全写入失败', e2);
+      }
+    } else {
+      console.error('[saveAllQdds] 写入失败', e);
+    }
+  }
   if (STATE.currentQddId) {
-    localStorage.setItem(STORAGE_KEYS.lastQdd, STATE.currentQddId);
+    try { localStorage.setItem(STORAGE_KEYS.lastQdd, STATE.currentQddId); } catch(e) {}
   }
   updateAutoSaveLabel();
 }

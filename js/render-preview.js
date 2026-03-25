@@ -57,21 +57,28 @@ function renderTableLayout() {
       </div>
     </div>`;
 
-    // ── Image: support multiple images ──
-    const imgs = step.images && step.images.length > 0
-      ? step.images
-      : (step.imageUrl ? [step.imageUrl] : []);
-    const imgInner = imgs.length > 0
-      ? imgs.map((url, ii) => `
-          <div class="qt-img-zone qt-img-has-img qt-img-thumb" data-step-id="${step.id}" tabindex="0"
-               title="双击放大" ondblclick="openImagePreview('${esc(url)}')">
-            <img src="${esc(url)}" loading="lazy" onerror="this.style.display='none'">
-          </div>`).join('')
-      : '';
-    const img = `<div class="qt-col-img qt-img-zone${imgs.length === 0 ? ' qt-col-img-empty' : ''} qt-img-multi-wrap" data-step-id="${step.id}" tabindex="0">
-      ${imgInner}
-      ${imgs.length === 0 ? '<span class="qt-img-empty-hint">� 拖入或 Ctrl+V 粘贴图片</span>' : ''}
-    </div>`;
+    // ── Image ──
+    const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
+    const sid = step.id;
+    const img = imgUrl
+      ? `<div class="qt-col-img qt-img-zone" data-step-id="${sid}"
+             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+             title="拖入图片可替换；双击放大">
+           <img src="${esc(imgUrl)}" loading="lazy"
+                ondblclick="openImagePreview('${esc(imgUrl)}')"
+                onerror="this.style.display='none'">
+           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
+         </div>`
+      : `<div class="qt-col-img qt-img-zone qt-col-img-empty" data-step-id="${sid}"
+             onclick="pickStepImage('${sid}')"
+             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+             title="点击或拖入图片">
+           <span class="qt-img-empty-hint">📷 点击或拖入图片</span>
+         </div>`;
 
     // ── Fields: nested 2-col table [label | value] — skip empty rows ──
     const fieldRows = fieldDefs.map(fd => {
@@ -128,8 +135,8 @@ function renderTableLayout() {
     });
   });
 
-  // Bind inline image drop zones
-  bindInlineImageZones($previewCanvas);
+  // 绑定图片区交互（拖入 / 点击选择 / 删除）
+  bindPreviewImageZones($previewCanvas);
 }
 
 // ===== Copy Table to Clipboard =====
@@ -177,8 +184,9 @@ function copyTableToClipboard() {
   const imgCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
     const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
-    const inner = imgs.length > 0
-      ? imgs.map(url => `<img src="${h(url)}" style="max-width:160px;max-height:110px;display:inline-block;margin:2px;">`).join('')
+    const resolvedImgs = imgs.map(u => getResolvedImageUrl(u)).filter(Boolean);
+    const inner = resolvedImgs.length > 0
+      ? resolvedImgs.map(url => `<img src="${h(url)}" style="max-width:160px;max-height:110px;display:inline-block;margin:2px;">`).join('')
       : `<span style="${fnt}color:#aaa;">🖼 在属性面板添加配图</span>`;
     return `<td colspan="2" style="${B}${fnt}padding:5px;text-align:center;vertical-align:middle;background:${hexToRgba(color,0.07)};height:80px;">${inner}</td>`;
   }).join('');
@@ -403,12 +411,15 @@ function renderStepPanel() {
       <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="删除此字段">×</button>
     </div>`).join('');
 
-  // Images list
-  const imgItems = (step.images || []).map((url, ii) => `
-    <div class="pp-img-item" data-ii="${ii}">
-      <img src="${esc(url)}" alt="图${ii+1}" onclick="openImagePreview('${esc(url)}')">
-      <button class="pp-img-del" onclick="deletePanelImage('${step.id}',${ii})" title="删除">×</button>
-    </div>`).join('');
+  // 图片区：有图则全宽展示+删除，无图则显示选择按钮
+  const _rawImgKey = step.imageUrl || (Array.isArray(step.images) && step.images[0]) || '';
+  const imgUrl = getResolvedImageUrl(_rawImgKey);
+  const imgSection = imgUrl
+    ? `<div class="pp-img-single">
+         <img src="${esc(imgUrl)}" alt="配图" onclick="openImagePreview('${esc(imgUrl)}')" title="点击放大">
+         <button class="pp-img-del" onclick="deleteStepImage('${step.id}')">× 删除</button>
+       </div>`
+    : `<button class="pp-img-add-btn" onclick="pickStepImage('${step.id}')">📷 选择图片</button>`;
 
   body.innerHTML = `
     <div class="pp-section">
@@ -449,18 +460,8 @@ function renderStepPanel() {
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">配图
-        <button class="pp-img-add-btn" onclick="addPanelImage('${step.id}')" title="从文件选择">＋ 添加</button>
-      </label>
-      <div class="pp-img-list" id="pp-img-list-${step.id}">
-        ${imgItems}
-        <div class="pp-img-drop-zone" data-step-id="${step.id}"
-          onclick="addPanelImage('${step.id}')"
-          tabindex="0"
-          title="点击添加 / 拖入图片 / Ctrl+V">
-          📷 拖入或点击添加
-        </div>
-      </div>
+      <label class="pp-label">配图</label>
+      ${imgSection}
     </div>
 
     <div class="pp-section">
@@ -475,9 +476,6 @@ function renderStepPanel() {
       <button class="pp-add-step-btn" onclick="addStep()">＋ 在此后新增环节</button>
     </div>
   `;
-
-  // Bind drag-drop on the image drop zone
-  bindPanelImageDropZone(step.id);
 }
 
 // ── Panel field savers ──
@@ -600,44 +598,6 @@ function addMultipleSteps() {
   showToast(`已添加 ${count} 个环节`);
 }
 
-// ── Panel image management ──
-function addPanelImage(stepId) {
-  _openImageFilePicker(stepId, 'panel');
-}
-
-function deletePanelImage(stepId, ii) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step || !step.images) return;
-  step.images.splice(ii, 1);
-  // Keep legacy imageUrl in sync
-  step.imageUrl = step.images[0] || '';
-  saveAllQdds();
-  renderStepPanel();
-  renderPreview();
-}
-
-function bindPanelImageDropZone(stepId) {
-  const zone = document.querySelector(`#pp-img-list-${stepId} .pp-img-drop-zone`);
-  if (!zone) return;
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('qt-img-drop-hover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('qt-img-drop-hover'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('qt-img-drop-hover');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      _inlineImgTargetId = stepId;
-      _inlineImgTargetMode = 'panel';
-      readInlineImageFile(file, stepId);
-    }
-  });
-  // Ctrl+V paste on panel zone (focused)
-  zone.addEventListener('focus', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
-  zone.addEventListener('blur',  () => { setTimeout(() => { if (_focusedImgZoneId === stepId) { _focusedImgZoneId = null; _focusedImgZoneMode = null; } }, 500); });
-  // Click also sets focus state (since onclick=addPanelImage steals focus before paste can fire)
-  zone.addEventListener('mousedown', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
-}
-
 // ===== Trigger Inline Dropdown =====
 let _triggerDropdownCleanup = null;
 
@@ -723,27 +683,29 @@ function renderTimelineLayout() {
     `;
   }).join('');
 
-  // ── Row 2: Images (multi-image support) ──
+  // ── Row 2: Image ──
   const imgCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
-    const imgs = step.images && step.images.length > 0
-      ? step.images
-      : (step.imageUrl ? [step.imageUrl] : []);
-    let imgHtml;
-    if (imgs.length === 0) {
-      imgHtml = `<div class="tl-image-placeholder" data-step-id="${step.id}">
-          <span>📷 在属性面板添加配图</span>
-        </div>`;
-    } else if (imgs.length === 1) {
-      imgHtml = `<img class="tl-image" src="${esc(imgs[0])}" alt="配图" loading="lazy"
-          ondblclick="openImagePreview('${esc(imgs[0])}')" title="双击放大">`;
-    } else {
-      // Multiple: horizontal scroll strip
-      const thumbs = imgs.map(url => `
-        <img class="tl-image-thumb" src="${esc(url)}" alt="" loading="lazy"
-          ondblclick="openImagePreview('${esc(url)}')" title="双击放大">`).join('');
-      imgHtml = `<div class="tl-multi-img-strip">${thumbs}</div>`;
-    }
+    const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
+    const sid = step.id;
+    const imgHtml = imgUrl
+      ? `<div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
+             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+             title="拖入图片可替换；双击放大">
+           <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
+                ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
+           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
+         </div>`
+      : `<div class="qt-img-zone tl-image-placeholder" data-step-id="${sid}"
+             onclick="pickStepImage('${sid}')"
+             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+             title="点击或拖入图片">
+           <span>📷 点击或拖入图片</span>
+         </div>`;
     return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">${imgHtml}</div>`;
   }).join('');
 
@@ -780,6 +742,6 @@ function renderTimelineLayout() {
     </div>
   `;
 
-  // Bind inline image drop zones
-  bindInlineImageZones($previewCanvas);
+  // 绑定图片区交互
+  bindPreviewImageZones($previewCanvas);
 }

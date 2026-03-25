@@ -22,17 +22,76 @@ function escWithBr(str) {
   return esc(str).replace(/\n/g, '<br>');
 }
 
-// ===== DOM Refs (legacy globals, may be null at load time) =====
-const $stepsList = document.getElementById('steps-list');
-const $previewCanvas = document.getElementById('preview-canvas');
-const $stepCount = document.getElementById('step-count');
-const $addStepBtn = document.getElementById('addStepBtn');
-const $layoutSelect = document.getElementById('layoutSelect');
-const $themeSelect = document.getElementById('themeSelect');
-const $questTitleInput = document.getElementById('questTitle');
-const $importFileInput = document.getElementById('importFile');
-const $exportPngBtn = document.getElementById('exportPngBtn');
-const $exportPdfBtn = document.getElementById('exportPdfBtn');
+// ===== Bind Editor Page Events (called after editor HTML is injected) =====
+function bindEditorEvents() {
+  const $backBtn = document.getElementById('backToHomeBtn');
+  if ($backBtn) $backBtn.addEventListener('click', showHomePage);
+
+  const $questTitle = document.getElementById('questTitle');
+  if ($questTitle) $questTitle.addEventListener('input', e => {
+    STATE.questTitle = e.target.value;
+    const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
+  });
+
+  const $layoutSelect = document.getElementById('layoutSelect');
+  if ($layoutSelect) {
+    $layoutSelect.value = STATE.layout;
+    $layoutSelect.addEventListener('change', e => {
+      STATE.layout = e.target.value;
+      savePrefs();
+      renderPreview();
+    });
+  }
+
+  const $themeSelect = document.getElementById('themeSelect');
+  if ($themeSelect) {
+    $themeSelect.value = STATE.theme;
+    $themeSelect.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); });
+  }
+
+  const $colWidthSlider = document.getElementById('colWidthSlider');
+  if ($colWidthSlider) {
+    $colWidthSlider.value = STATE.colWidth;
+    $colWidthSlider.addEventListener('input', e => {
+      STATE.colWidth = parseInt(e.target.value, 10);
+      const label = document.getElementById('colWidthVal');
+      if (label) label.textContent = STATE.colWidth;
+      savePrefs();
+      if (STATE.layout === 'timeline') renderPreview();
+    });
+  }
+
+  const $addStepBtn = document.getElementById('addStepBtn');
+  if ($addStepBtn) $addStepBtn.addEventListener('click', addStep);
+
+  const $importFile = document.getElementById('importFile');
+  if ($importFile) $importFile.addEventListener('change', handleImportFile);
+
+  const $restoreFile = document.getElementById('restoreJsonFile');
+  if ($restoreFile) $restoreFile.addEventListener('change', handleRestoreJson);
+
+  const $backupBtn = document.getElementById('backupJsonBtn');
+  if ($backupBtn) $backupBtn.addEventListener('click', backupJson);
+
+  const $aiImportBtn = document.getElementById('aiImportBtn');
+  if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
+
+  const $exportPngBtn = document.getElementById('exportPngBtn');
+  if ($exportPngBtn) $exportPngBtn.addEventListener('click', exportPng);
+
+  const $exportPdfBtn = document.getElementById('exportPdfBtn');
+  if ($exportPdfBtn) $exportPdfBtn.addEventListener('click', exportPdf);
+
+  const $undoBtn = document.getElementById('undoBtn');
+  if ($undoBtn) $undoBtn.addEventListener('click', undoHistory);
+
+  const $redoBtn = document.getElementById('redoBtn');
+  if ($redoBtn) $redoBtn.addEventListener('click', redoHistory);
+
+  // Apply current layout/theme values to selects
+  applyTheme(STATE.theme);
+  updateUndoRedoUI();
+}
 
 // ===== Init =====
 function init() {
@@ -53,15 +112,17 @@ function init() {
   applyTheme(STATE.theme);
   bindGlobalEvents();
 
-  if (prefs.lastView === 'editor' && prefs.lastQdd) {
-    const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
-    if (qdd) {
-      openQdd(qdd.id);
-      return;
+  // 迁移旧 base64 图片到 IndexedDB（静默后台执行）
+  migrateAllImagesToDb().then(() => {
+    // 迁移完成后预热图片缓存，再决定显示哪个页面
+    return _preloadStepImages();
+  }).then(() => {
+    if (prefs.lastView === 'editor' && prefs.lastQdd) {
+      const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
+      if (qdd) { openQdd(qdd.id); return; }
     }
-  }
-  showHomePage();
-  _initImageZoneDelegation(); // register once, survives all re-renders
+    showHomePage();
+  });
 }
 
 function getSampleData() {
@@ -160,25 +221,6 @@ function applyTheme(theme) {
   const sel = document.getElementById('themeSelect');
   if (sel) sel.value = theme;
 }
-
-// ===== Bind paste once globally (step editor image paste) =====
-function bindImagePaste() {
-  document.addEventListener('paste', e => {
-    const editor = document.getElementById('step-editor');
-    if (!editor || editor.classList.contains('hidden')) return;
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) fileToBase64(file, setImagePreview);
-        break;
-      }
-    }
-  });
-}
-bindImagePaste();
 
 // ===== Start =====
 init();

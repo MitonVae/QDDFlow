@@ -114,5 +114,6 @@ function openQdd(id) {
   if (im) im.classList.add('hidden');
 
   bindEditorEvents();
-  renderAll();
+  // 预热图片缓存后再渲染（确保 idb: 图片正常显示）
+  _preloadStepImages().then(() => renderAll());
 }

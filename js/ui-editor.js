@@ -332,18 +332,15 @@ function openStepEditor(id) {
         </div>
         <div class="form-row">
           <label>配图</label>
-          <div class="image-upload-area" id="ef-image-drop-zone">
+          <div class="image-upload-area">
             <div class="image-upload-preview" id="ef-image-preview">
-              ${step?.imageUrl ? `<img src="${esc(step.imageUrl)}" alt="预览">` : '<span class="image-upload-hint">📷 拖入图片 / Ctrl+V 粘贴 / 点击选择</span>'}
+              ${step?.imageUrl ? `<img src="${esc(step.imageUrl)}" alt="预览">` : '<span class="image-upload-hint">📷 尚未添加配图</span>'}
             </div>
             <div class="image-upload-actions">
-              <button type="button" class="img-action-btn" onclick="triggerImageFileSelect()">📂 本地选择</button>
-              <button type="button" class="img-action-btn img-clear-btn" onclick="clearImageField()" id="ef-image-clear" ${step?.imageUrl ? '' : 'style="display:none"'}>✕ 清除</button>
-              <input type="file" id="ef-image-file" accept="image/*" style="display:none" onchange="handleImageFileChange(this)">
+              <button type="button" class="img-action-btn" onclick="editorPickImage()">📂 选择图片</button>
+              <button type="button" class="img-action-btn img-clear-btn" onclick="editorClearImage()" id="ef-image-clear" ${step?.imageUrl ? '' : 'style="display:none"'}>✕ 清除</button>
             </div>
-            <div class="image-upload-url-row">
-              <input type="url" id="ef-image" placeholder="或填入网络图片地址 https://..." value="${esc(step?.imageUrl||'')}" oninput="handleImageUrlInput(this.value)">
-            </div>
+            <input type="hidden" id="ef-image" value="${esc(step?.imageUrl||'')}">
           </div>
         </div>
         <div class="form-row">
@@ -367,8 +364,6 @@ function openStepEditor(id) {
   `;
   // Set initial color picker hidden input
   modal.querySelector('#ef-color-picker').dataset.selected = selectedColor;
-  // Bind image drop zone events
-  bindImageDropZone();
 }
 
 function renderCustomFieldRow(index, key='', value='') {

@@ -133,36 +133,43 @@ async function _captureNode(target, scale) {
   const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
     .backgroundColor || '#ffffff';
 
-  // 1. 收集并临时解除所有祖先和 target 内部的 overflow 限制
+  // 1. 只临时解除「target 的祖先」的 overflow 裁切，
+  //    不动 target 内部——否则会破坏 table/flex 布局导致边框错位和图片拉伸
   const overflowNodes = [];
-  // 祖先
   let el = target.parentElement;
   while (el && el !== document.body) {
     const cs = getComputedStyle(el);
     if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
-      overflowNodes.push({ el, overflow: el.style.overflow, overflowX: el.style.overflowX, overflowY: el.style.overflowY });
-      el.style.overflow = 'visible';
+      overflowNodes.push({
+        el,
+        overflow:  el.style.overflow,
+        overflowX: el.style.overflowX,
+        overflowY: el.style.overflowY,
+      });
+      el.style.overflow  = 'visible';
       el.style.overflowX = 'visible';
       el.style.overflowY = 'visible';
     }
     el = el.parentElement;
   }
-  // target 自身及内部
-  [target, ...target.querySelectorAll('*')].forEach(node => {
-    const cs = getComputedStyle(node);
-    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
-      overflowNodes.push({ el: node, overflow: node.style.overflow, overflowX: node.style.overflowX, overflowY: node.style.overflowY });
-      node.style.overflow  = 'visible';
-      node.style.overflowX = 'visible';
-      node.style.overflowY = 'visible';
-    }
-  });
 
-  // 2. 等一帧让浏览器重新计算布局
+  // 2. 等待 target 内所有图片加载完毕
+  const imgs = Array.from(target.querySelectorAll('img'));
+  await Promise.all(imgs.map(img =>
+    img.complete ? Promise.resolve() : new Promise(r => {
+      img.addEventListener('load',  r, { once: true });
+      img.addEventListener('error', r, { once: true });
+    })
+  ));
+
+  // 3. 等两帧让浏览器重新计算布局
+  await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  const W = target.scrollWidth;
-  const H = target.scrollHeight;
+  // 4. 用 getBoundingClientRect 获取 target 真实渲染尺寸
+  const rect = target.getBoundingClientRect();
+  const W = Math.ceil(rect.width);
+  const H = Math.ceil(rect.height);
 
   try {
     const canvas = await html2canvas(target, {
@@ -170,19 +177,19 @@ async function _captureNode(target, scale) {
       scale,
       useCORS: true,
       allowTaint: true,
-      scrollX: -window.scrollX,
-      scrollY: -window.scrollY,
+      scrollX: 0,
+      scrollY: 0,
       x: 0,
       y: 0,
       width:  W,
       height: H,
-      windowWidth:  W,
-      windowHeight: H,
+      windowWidth:  document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight,
       logging: false,
     });
     return canvas;
   } finally {
-    // 3. 还原 overflow
+    // 4. 还原祖先 overflow
     overflowNodes.forEach(({ el, overflow, overflowX, overflowY }) => {
       el.style.overflow  = overflow;
       el.style.overflowX = overflowX;
@@ -234,5 +241,40 @@ async function exportPdf() {
   }
 }
 
-// ===== Toast =====
-let toastTimer = null;
+// ===== Backup / Restore JSON =====
+function backupJson() {
+  const data = JSON.stringify({ qdds: STORE.qdds }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `QDDFlow_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ 备份已下载');
+}
+
+function handleRestoreJson(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!confirm('恢复备份将覆盖当前所有数据，确认继续？')) { e.target.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const parsed = JSON.parse(evt.target.result);
+      const qdds = parsed.qdds || (Array.isArray(parsed) ? parsed : null);
+      if (!qdds) { showToast('❌ 文件格式不正确'); return; }
+      STORE.qdds = qdds;
+      saveAllQdds();
+      STATE.currentQddId = null;
+      STATE.view = 'home';
+      savePrefs();
+      showHomePage();
+      showToast('✅ 恢复成功');
+    } catch (err) {
+      showToast('❌ 读取失败：' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}

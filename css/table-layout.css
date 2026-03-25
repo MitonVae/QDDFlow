@@ -517,3 +517,48 @@
   color: var(--text-muted);
   pointer-events: none;
 }
+
+/* ── 图片区拖入高亮 ── */
+.qt-img-zone {
+  position: relative;
+}
+.qt-img-zone.qt-img-drop-hover {
+  box-shadow: inset 0 0 0 3px var(--accent) !important;
+  background: rgba(99,102,241,0.08) !important;
+}
+.qt-col-img-empty.qt-img-zone,
+.tl-image-placeholder.qt-img-zone {
+  cursor: pointer;
+}
+.qt-col-img-empty.qt-img-zone:hover,
+.tl-image-placeholder.qt-img-zone:hover {
+  background: rgba(99,102,241,0.06);
+}
+
+/* ── 图片删除按钮（右上角，hover 时显示）── */
+.qt-img-del-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 3;
+  padding: 0;
+}
+.qt-col-img:hover .qt-img-del-btn,
+.tl-img-cell:hover .qt-img-del-btn {
+  opacity: 1;
+}
+.qt-img-del-btn:hover {
+  background: rgba(220,38,38,0.85);
+}

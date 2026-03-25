@@ -258,6 +258,39 @@
 }
 
 .pp-cf-add-btn,
+/* 面板单图展示（重构后）*/
+.pp-img-single {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.pp-img-single img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  background: var(--bg-secondary);
+  cursor: zoom-in;
+  display: block;
+}
+.pp-img-single .pp-img-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  width: auto;
+  height: auto;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.pp-img-single:hover .pp-img-del {
+  opacity: 1;
+}
+
 .pp-img-add-btn {
   background: none;
   border: none;
