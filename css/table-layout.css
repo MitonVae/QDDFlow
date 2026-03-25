@@ -90,7 +90,6 @@
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   line-height: 1.4;
-  border-bottom: 1px solid #000;
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -223,7 +222,7 @@
 
 /* ── Image block ── */
 .qt-col-img {
-  border-bottom: 1px solid #000;
+  border-top: 1px solid #000;
   flex-shrink: 0;
 }
 
@@ -244,7 +243,7 @@
   font-size: 11px;
   color: transparent;
   cursor: pointer;
-  border-bottom: 1px solid #000;
+  border-top: 1px solid #000;
   flex-shrink: 0;
   transition: height 0.15s, color 0.15s, background 0.15s;
   overflow: hidden;
@@ -325,49 +324,46 @@
   display: block;
 }
 
-/* ── Nested fields table: 2-col [label | value] ── */
-.qt-fields-table {
+/* ── Fields block: flex div rows（替代内嵌 table，避免 border-collapse 截图错位）── */
+.qt-fields-block {
   width: 100%;
-  border-collapse: collapse;
-  border-bottom: 1px solid #000;
   flex-shrink: 0;
-  /* don't stretch; let qt-col-desc fill the rest */
 }
 
-.qt-fields-table tr {
-  border-bottom: 1px solid #000;
-}
-
-.qt-fields-table tr:last-child {
-  border-bottom: none;
+.qt-field-row {
+  display: flex;
+  border-top: 1px solid #000;
+  min-height: 34px;
 }
 
 /* Label cell */
 .qt-fl {
   width: 80px;
   min-width: 72px;
+  flex-shrink: 0;
   padding: 7px 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-toolbar);
   border-right: 1px solid #000;
-  vertical-align: top;
   white-space: nowrap;
   line-height: 1.5;
+  box-sizing: border-box;
 }
 
 /* Value cell */
 .qt-fv {
+  flex: 1;
   padding: 7px 9px;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
   word-break: break-word;
   outline: none;
-  vertical-align: top;
   min-height: 34px;
   transition: background 0.15s;
+  box-sizing: border-box;
 }
 
 .qt-fv:focus {
@@ -379,16 +375,6 @@
   color: var(--text-muted);
   pointer-events: none;
   font-style: italic;
-}
-
-/* Required-field empty state */
-.qt-fv-empty {
-  color: var(--text-muted);
-  font-style: italic;
-}
-.qt-fv-empty:focus {
-  font-style: normal;
-  color: var(--text-secondary);
 }
 
 /* Trigger select cell */
@@ -543,7 +529,7 @@
   outline: none;
   min-height: 80px;
   flex: 1;
-  /* stretch to fill remaining height in flex step cell */
+  border-top: 1px solid #000;
   transition: background 0.15s;
 }
 

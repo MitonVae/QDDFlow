@@ -80,28 +80,28 @@ function renderTableLayout() {
            <span>＋ 添加图片</span>
          </div>`;
 
-    // ── Fields: nested 2-col table [label | value] — skip empty rows ──
+    // ── Fields: flex rows [label | value]，跳过空值 ──
     const fieldRows = fieldDefs.map(fd => {
       const val = fd.custom ? (customMap[fd.field] || '') : (step[fd.field] || '');
       if (fd.type === 'trigger-select') {
-        // Always show trigger row (allows clicking to set); if empty show placeholder
         const displayVal = val || '—';
-        return `<tr>
-          <td class="qt-fl">${esc(fd.label)}：</td>
-          <td class="qt-fv qt-fv-select" data-step-id="${step.id}" data-field="trigger"
-              onclick="toggleTriggerDropdown(event,'${step.id}')" title="点击选择触发方式">${esc(displayVal)}<span class="qt-select-arrow">▾</span></td>
-        </tr>`;
+        return `<div class="qt-field-row">
+          <div class="qt-fl">触发方式：</div>
+          <div class="qt-fv qt-fv-select" data-step-id="${step.id}" data-field="trigger"
+               onclick="toggleTriggerDropdown(event,'${step.id}')" title="点击选择触发方式">${esc(displayVal)}<span class="qt-select-arrow">▾</span></div>
+        </div>`;
       }
-      // Skip row entirely if value is empty
       if (!val) return '';
-      return `<tr>
-        <td class="qt-fl">${esc(fd.label)}：</td>
-        <td class="qt-fv" contenteditable="true"
+      return `<div class="qt-field-row">
+        <div class="qt-fl">${esc(fd.label)}：</div>
+        <div class="qt-fv" contenteditable="true"
           data-step-id="${step.id}" data-field="${fd.field}"
-          data-custom="${fd.custom ? '1' : '0'}">${esc(val)}</td>
-      </tr>`;
+          data-custom="${fd.custom ? '1' : '0'}">${esc(val)}</div>
+      </div>`;
     }).join('');
-    const fields = `<table class="qt-fields-table" cellspacing="0" cellpadding="0">${fieldRows}</table>`;
+    const fields = fieldRows
+      ? `<div class="qt-fields-block">${fieldRows}</div>`
+      : '';
 
     // ── Description ──
     const desc = `<div class="qt-col-desc" contenteditable="true"
