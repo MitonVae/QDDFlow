@@ -375,3 +375,88 @@ function mergeAiStep(existing, incoming) {
     });
   }
 }
+
+// ===== AI 导出面板 =====
+
+function openAiExportPanel() {
+  const qdd = getCurrentQdd();
+  if (!qdd) { showToast('❌ 没有打开的 QDD'); return; }
+
+  // 构建 AI 可读的 JSON（去除内部字段，只保留内容）
+  const exportObj = {
+    title: qdd.title,
+    steps: (qdd.steps || []).map((s, i) => {
+      const step = {
+        name:       s.name       || `环节${i}`,
+        taskType:   s.taskType   || '',
+        trigger:    s.trigger    || '',
+        location:   s.location   || '',
+        characters: s.characters || '',
+        desc:       s.desc       || '',
+        customFields: (s.customFields || []).filter(f => f.key),
+      };
+      // 图片字段太大，AI 读不了 base64，直接省略
+      return step;
+    }),
+  };
+  const jsonText = JSON.stringify(exportObj, null, 2);
+
+  let overlay = document.getElementById('ai-export-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'ai-export-overlay';
+    overlay.className = 'ai-import-overlay'; // 复用 AI 导入的样式
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeAiExportPanel(); });
+  }
+
+  overlay.innerHTML = `
+    <div class="ai-import-panel" style="max-width:700px;">
+      <div class="ai-import-header">
+        <div class="ai-import-title">
+          <span>🤖 AI 导出</span>
+          <small>复制 JSON → 发给 AI → 让 AI 分析、续写或修改</small>
+        </div>
+        <button class="ai-import-close" onclick="closeAiExportPanel()">×</button>
+      </div>
+      <div class="ai-import-body" style="flex-direction:column;gap:12px;">
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+          将下方 JSON 发给 AI，配合提示词可以让 AI：续写新环节、修改描述、调整结构、分析设计问题等。
+          <br>修改完后可以通过「AI 导入」的「修改指定环节」模式合并回来。
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:var(--text-muted);">当前 QDD：<strong>${escHtml(qdd.title)}</strong>（${qdd.steps.length} 个环节，不含图片）</span>
+          <button class="ai-copy-btn" onclick="copyAiExportJson()">📋 复制 JSON</button>
+        </div>
+        <pre class="ai-prompt-pre" id="ai-export-json-content" style="max-height:420px;">${escHtml(jsonText)}</pre>
+        <div style="font-size:11px;color:var(--text-muted);">
+          💡 修改后让 AI 输出相同格式的 JSON，再用「🤖 AI 导入 → 修改指定环节」合并回来。
+        </div>
+      </div>
+    </div>
+  `;
+  overlay.classList.add('visible');
+}
+
+function closeAiExportPanel() {
+  const overlay = document.getElementById('ai-export-overlay');
+  if (overlay) overlay.classList.remove('visible');
+}
+
+function copyAiExportJson() {
+  const pre = document.getElementById('ai-export-json-content');
+  if (!pre) return;
+  const text = pre.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('#ai-export-overlay .ai-copy-btn');
+    if (btn) { btn.textContent = '✓ 已复制！'; setTimeout(() => { btn.textContent = '📋 复制 JSON'; }, 2000); }
+  }).catch(() => {
+    const el = document.createElement('textarea');
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('已复制');
+  });
+}

@@ -67,14 +67,17 @@ function bindEditorEvents() {
   const $importFile = document.getElementById('importFile');
   if ($importFile) $importFile.addEventListener('change', handleImportFile);
 
-  const $restoreFile = document.getElementById('restoreJsonFile');
-  if ($restoreFile) $restoreFile.addEventListener('change', handleRestoreJson);
+  const $importJsonFile = document.getElementById('importJsonFile');
+  if ($importJsonFile) $importJsonFile.addEventListener('change', handleImportJson);
 
-  const $backupBtn = document.getElementById('backupJsonBtn');
-  if ($backupBtn) $backupBtn.addEventListener('click', backupJson);
+  const $exportJsonBtn = document.getElementById('exportJsonBtn');
+  if ($exportJsonBtn) $exportJsonBtn.addEventListener('click', exportCurrentQddAsJson);
 
   const $aiImportBtn = document.getElementById('aiImportBtn');
   if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
+
+  const $aiExportBtn = document.getElementById('aiExportBtn');
+  if ($aiExportBtn) $aiExportBtn.addEventListener('click', openAiExportPanel);
 
   const $exportPngBtn = document.getElementById('exportPngBtn');
   if ($exportPngBtn) $exportPngBtn.addEventListener('click', exportPng);

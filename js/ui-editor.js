@@ -33,16 +33,17 @@ function buildEditorPageHTML() {
         <button class="tb-btn tb-undo-btn" id="undoBtn" disabled title="撤回 (Ctrl+Z)">↩ 撤回</button>
         <button class="tb-btn tb-undo-btn" id="redoBtn" disabled title="重做 (Ctrl+Y)">↪ 重做</button>
         <span class="tb-divider"></span>
-        <label class="tb-btn icon-btn" title="导入Excel/CSV">
-          📂 导入
+        <label class="tb-btn icon-btn" title="从 Excel/CSV 导入环节">
+          📂 导入表格
           <input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none">
         </label>
-        <label class="tb-btn icon-btn" title="从JSON备份文件恢复">
-          📥 恢复
-          <input type="file" id="restoreJsonFile" accept=".json" style="display:none">
+        <label class="tb-btn icon-btn" title="从 JSON 文件导入 QDD">
+          📥 导入 JSON
+          <input type="file" id="importJsonFile" accept=".json" style="display:none">
         </label>
-        <button class="tb-btn" id="backupJsonBtn" title="导出全部数据为JSON备份文件">💾 备份</button>
-        <button class="tb-btn tb-btn-ai" id="aiImportBtn" title="用AI生成QDD结构并导入">🤖 AI 导入</button>
+        <button class="tb-btn" id="exportJsonBtn" title="将当前 QDD 导出为 JSON 文件（可导入或发给 AI）">📤 导出 JSON</button>
+        <button class="tb-btn tb-btn-ai" id="aiImportBtn" title="用 AI 生成 QDD 结构并导入">🤖 AI 导入</button>
+        <button class="tb-btn tb-btn-ai" id="aiExportBtn" title="将当前 QDD 导出为 AI 可读格式，方便让 AI 续写或分析">🤖 AI 导出</button>
         <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
         <span id="autosave-label" class="tb-autosave-label"></span>
         <button class="tb-btn" id="shareLinkBtn" title="生成分享链接">🔗 分享</button>

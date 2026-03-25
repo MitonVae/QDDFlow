@@ -248,36 +248,96 @@ async function exportPdf() {
   }
 }
 
-// ===== Backup / Restore JSON =====
-function backupJson() {
-  const data = JSON.stringify({ qdds: STORE.qdds }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `QDDFlow_backup_${new Date().toISOString().slice(0,10)}.json`;
+// ===== 导出当前 QDD 为 JSON（AI 可识别格式）=====
+function exportCurrentQddAsJson() {
+  const qdd = getCurrentQdd();
+  if (!qdd) { showToast('❌ 没有打开的 QDD'); return; }
+
+  // 导出为 AI 能直接导入的格式：去除内部字段（id、color 等），只保留内容字段
+  const exportData = {
+    title: qdd.title,
+    steps: (qdd.steps || []).map(s => {
+      const step = {
+        name:         s.name         || '',
+        taskType:     s.taskType     || '',
+        trigger:      s.trigger      || '',
+        location:     s.location     || '',
+        characters:   s.characters   || '',
+        desc:         s.desc         || '',
+        customFields: (s.customFields || []).filter(f => f.key),
+      };
+      // 图片：idb: 引用无法导出，改用缓存里的 base64；若没有则留空
+      const resolvedImg = getResolvedImageUrl(s.imageUrl || '');
+      if (resolvedImg) step.imageUrl = resolvedImg;
+      return step;
+    }),
+  };
+
+  const json = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${(qdd.title || 'QDD').replace(/[\/\\:*?"<>|]/g, '_')}_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('✅ 备份已下载');
+  showToast('✅ JSON 已导出');
 }
 
-function handleRestoreJson(e) {
+// ===== 从 JSON 文件导入 QDD =====
+function handleImportJson(e) {
   const file = e.target.files[0];
   if (!file) return;
-  if (!confirm('恢复备份将覆盖当前所有数据，确认继续？')) { e.target.value = ''; return; }
   const reader = new FileReader();
   reader.onload = evt => {
     try {
       const parsed = JSON.parse(evt.target.result);
-      const qdds = parsed.qdds || (Array.isArray(parsed) ? parsed : null);
-      if (!qdds) { showToast('❌ 文件格式不正确'); return; }
-      STORE.qdds = qdds;
+      // 支持两种格式：单个 QDD 对象 / { qdds: [...] } 备份包
+      let qddsToImport = [];
+      if (parsed.qdds && Array.isArray(parsed.qdds)) {
+        // 旧版备份包格式
+        qddsToImport = parsed.qdds;
+      } else if (Array.isArray(parsed)) {
+        qddsToImport = parsed;
+      } else if (parsed.title !== undefined && Array.isArray(parsed.steps)) {
+        // 单个 QDD（AI 格式或手动导出）
+        qddsToImport = [parsed];
+      } else {
+        showToast('❌ 文件格式不正确');
+        return;
+      }
+
+      if (qddsToImport.length === 0) { showToast('❌ 文件中没有 QDD 数据'); return; }
+
+      pushHistory();
+      let imported = 0;
+      for (const raw of qddsToImport) {
+        const newQdd = {
+          id:    genId(),
+          title: raw.title || '导入的 QDD',
+          steps: (raw.steps || []).map(s => ({
+            id:           genId(),
+            name:         s.name         || '未命名环节',
+            taskType:     s.taskType     || '',
+            trigger:      s.trigger      || '',
+            location:     s.location     || '',
+            characters:   s.characters   || '',
+            desc:         s.desc         || '',
+            imageUrl:     s.imageUrl     || '',
+            images:       Array.isArray(s.images) ? s.images : (s.imageUrl ? [s.imageUrl] : []),
+            color:        s.color        || '',
+            colorOverride:s.colorOverride|| null,
+            customFields: Array.isArray(s.customFields)
+              ? s.customFields.map(f => ({ key: f.key || '', value: f.value || '' }))
+              : [],
+          })),
+        };
+        STORE.qdds.push(newQdd);
+        imported++;
+      }
       saveAllQdds();
-      STATE.currentQddId = null;
-      STATE.view = 'home';
-      savePrefs();
       showHomePage();
-      showToast('✅ 恢复成功');
+      showToast(`✅ 已导入 ${imported} 个 QDD`);
     } catch (err) {
       showToast('❌ 读取失败：' + err.message);
     }
