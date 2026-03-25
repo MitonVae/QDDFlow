@@ -166,10 +166,18 @@ async function _captureNode(target, scale) {
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  // 4. 用 getBoundingClientRect 获取 target 真实渲染尺寸
-  const rect = target.getBoundingClientRect();
-  const W = Math.ceil(rect.width);
-  const H = Math.ceil(rect.height);
+  // 4. 获取 target 完整内容尺寸
+  const W = target.scrollWidth;
+  const H = target.scrollHeight;
+
+  // 临时把 target 宽度固定为 scrollWidth，防止 html2canvas 按视口折行
+  const prevWidth  = target.style.width;
+  const prevHeight = target.style.height;
+  target.style.width  = W + 'px';
+  target.style.height = H + 'px';
+
+  // 再等一帧
+  await new Promise(r => requestAnimationFrame(r));
 
   try {
     const canvas = await html2canvas(target, {
@@ -183,13 +191,16 @@ async function _captureNode(target, scale) {
       y: 0,
       width:  W,
       height: H,
-      windowWidth:  document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight,
+      windowWidth:  window.innerWidth,
+      windowHeight: window.innerHeight,
       logging: false,
     });
     return canvas;
   } finally {
-    // 4. 还原祖先 overflow
+    // 还原 target 尺寸
+    target.style.width  = prevWidth;
+    target.style.height = prevHeight;
+    // 还原祖先 overflow
     overflowNodes.forEach(({ el, overflow, overflowX, overflowY }) => {
       el.style.overflow  = overflow;
       el.style.overflowX = overflowX;
