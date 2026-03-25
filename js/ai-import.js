@@ -262,18 +262,64 @@ function doAiImport() {
   pushHistory();
 
   if (mode === 'patch') {
-    // ── 修改指定环节模式 ──
     const currentQdd = getCurrentQdd();
     if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
     const srcSteps = (qdds[0].steps || []);
     let matched = 0, added = 0;
     srcSteps.forEach(incoming => {
-      // Match by index field first, then by name
       let target = null;
       const idxStr = incoming.index != null ? String(incoming.index).trim() : '';
-      if (idxStr) {
-        target = currentQdd.steps.find(s => String(s.index || '').trim() === idxStr);
-      }
+      if (idxStr) target = currentQdd.steps.find(s => String(s.index || '').trim() === idxStr);
+      if (!target && incoming.name) target = currentQdd.steps.find(s => s.name === incoming.name);
+      if (target) { mergeAiStep(target, incoming); matched++; }
+      else { currentQdd.steps.push(normalizeAiStep(incoming)); added++; }
+    });
+    syncStateFromQdd(currentQdd);
+    const msg = `✅ 已更新 ${matched} 个环节${added > 0 ? `，追加 ${added} 个新环节` : ''}`;
+    setAiFeedback(msg, false);
+    _migrateImagesAndRefresh(msg, false);
+
+  } else if (mode === 'add') {
+    const currentQdd = getCurrentQdd();
+    if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
+    const newSteps = (qdds[0].steps || []).map(s => normalizeAiStep(s));
+    currentQdd.steps.push(...newSteps);
+    syncStateFromQdd(currentQdd);
+    const msg = `✅ 已追加 ${newSteps.length} 个环节到当前 QDD`;
+    setAiFeedback(msg, false);
+    _migrateImagesAndRefresh(msg, false);
+
+  } else {
+    // new QDD 模式：先把数据写进 STORE，再 migrate，migrate 完成后再跳首页
+    for (const raw of qdds) {
+      STORE.qdds.push({ id: genId(), title: raw.title || '从AI导入', steps: (raw.steps || []).map(s => normalizeAiStep(s)) });
+    }
+    const msg = `✅ 已导入 ${qdds.length} 个 QDD`;
+    setAiFeedback(msg, false);
+    _migrateImagesAndRefresh(msg, true);  // migrate 完成后才跳首页
+  }
+}
+
+async function _migrateImagesAndRefresh(successMsg, goHome = false) {
+  showToast('⏳ 正在处理图片...');
+  try {
+    // 先把所有 base64 存入 IndexedDB，step.imageUrl 变为 idb: key
+    await migrateAllImagesToDb();
+    // 再保存到 localStorage（此时只含 idb: key，体积极小）
+    saveAllQdds();
+    // 预热缓存，确保渲染时能立即显示
+    await _preloadStepImages();
+  } catch (e) {
+    console.warn('[_migrateImagesAndRefresh]', e);
+  }
+  if (goHome) {
+    closeAiImportPanel();
+    showHomePage();
+  } else {
+    renderAll();
+  }
+  showToast(successMsg);
+}
       if (!target && incoming.name) {
         target = currentQdd.steps.find(s => s.name === incoming.name);
       }
