@@ -301,81 +301,10 @@ function doAiImport() {
 }
 
 async function _migrateImagesAndRefresh(successMsg, goHome = false) {
-  showToast('⏳ 正在处理图片...');
   try {
-    // 先把所有 base64 存入 IndexedDB，step.imageUrl 变为 idb: key
     await migrateAllImagesToDb();
-    // 再保存到 localStorage（此时只含 idb: key，体积极小）
     saveAllQdds();
-    // 预热缓存，确保渲染时能立即显示
     await _preloadStepImages();
-  } catch (e) {
-    console.warn('[_migrateImagesAndRefresh]', e);
-  }
-  if (goHome) {
-    closeAiImportPanel();
-    showHomePage();
-  } else {
-    renderAll();
-  }
-  showToast(successMsg);
-}
-      if (!target && incoming.name) {
-        target = currentQdd.steps.find(s => s.name === incoming.name);
-      }
-      if (target) {
-        mergeAiStep(target, incoming);
-        matched++;
-      } else {
-        // No match → append as new step
-        currentQdd.steps.push(normalizeAiStep(incoming));
-        added++;
-      }
-    });
-    syncStateFromQdd(currentQdd);
-    const msg = `✅ 已更新 ${matched} 个环节${added > 0 ? `，追加 ${added} 个新环节` : ''}`;
-    setAiFeedback(msg, false);
-    _migrateImagesAndRefresh(msg);
-
-  } else if (mode === 'add') {
-    const currentQdd = getCurrentQdd();
-    if (!currentQdd) { setAiFeedback('❌ 当前没有打开的 QDD，请先选择或创建一个', true); return; }
-    const srcQdd = qdds[0];
-    const newSteps = (srcQdd.steps || []).map(s => normalizeAiStep(s));
-    currentQdd.steps.push(...newSteps);
-    syncStateFromQdd(currentQdd);
-    const msg = `✅ 已追加 ${newSteps.length} 个环节到当前 QDD`;
-    setAiFeedback(msg, false);
-    _migrateImagesAndRefresh(msg);
-
-  } else {
-    // new QDD mode
-    for (const raw of qdds) {
-      const newQdd = {
-        id: genId(),
-        title: raw.title || '从AI导入',
-        steps: (raw.steps || []).map(s => normalizeAiStep(s)),
-      };
-      STORE.qdds.push(newQdd);
-    }
-    const msg = `✅ 已导入 ${qdds.length} 个 QDD`;
-    setAiFeedback(msg, false);
-    _migrateImagesAndRefresh(msg, true);
-  }
-}
-
-/**
- * 导入完成后统一收尾：
- * 1. 把所有 base64 imageUrl 迁移进 IndexedDB（这样 localStorage 不会超限）
- * 2. saveAllQdds()（此时 localStorage 只存 idb: key，很小）
- * 3. 预热图片缓存，刷新界面
- */
-async function _migrateImagesAndRefresh(successMsg, goHome = false) {
-  showToast('⏳ 正在处理图片...');
-  try {
-    await migrateAllImagesToDb(); // 把所有 base64 迁移进 IndexedDB
-    saveAllQdds();                // 重新保存（现在只含 idb: key，体积小）
-    await _preloadStepImages();   // 预热缓存
   } catch (e) {
     console.warn('[_migrateImagesAndRefresh]', e);
   }

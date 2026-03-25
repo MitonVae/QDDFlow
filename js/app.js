@@ -101,6 +101,9 @@ function init() {
   STATE.colWidth = prefs.colWidth;
 
   const saved = loadAllQdds();
+  console.log('[init] loadAllQdds结果:', saved,
+    '| qdds数量:', saved ? saved.length : 'null',
+    '| 总steps:', saved ? saved.reduce((n,q)=>n+(q.steps||[]).length,0) : 'null');
   if (saved && saved.length > 0) {
     STORE.qdds = saved;
   } else {
