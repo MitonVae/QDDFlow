@@ -245,6 +245,8 @@ function setStepTaskType(stepId, typeValue) {
   renderStepsList();
 }
 
+function showToast(msg) {
+  let toast = document.getElementById('toast');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'toast';

@@ -1,140 +1,92 @@
-// ===== Global Events (bound once) =====
-function bindGlobalEvents() {
-  // Theme select (always in DOM)
-  const $themeSelect = document.getElementById('themeSelect');
-  if ($themeSelect) $themeSelect.addEventListener('change', e => { applyTheme(e.target.value); savePrefs(); });
-
-  // Close modals on backdrop click
-  document.getElementById('step-editor').addEventListener('click', e => {
-    if (e.target === document.getElementById('step-editor')) closeStepEditor();
-  });
-  document.getElementById('import-modal').addEventListener('click', e => {
-    if (e.target === document.getElementById('import-modal')) closeImportModal();
-  });
-
-  // Keyboard shortcuts: Undo / Redo
-  document.addEventListener('keydown', e => {
-    const inInput = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) ||
-      e.target.contentEditable === 'true';
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      if (inInput) return; // let browser handle native undo in inputs
-      e.preventDefault();
-      undoHistory();
-    }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-      if (inInput) return;
-      e.preventDefault();
-      redoHistory();
-    }
-    // Ctrl+S: manual save toast
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      saveAllQdds();
-      showToast('✓ 已保存');
-    }
-  });
-
-  // Auto-save every 30 seconds
-  setInterval(() => {
-    if (STATE.view === 'editor') {
-      const qdd = getCurrentQdd();
-      if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
-      // Also write autosave backup slot
-      const stamp = new Date().toISOString();
-      try {
-        localStorage.setItem('qdd_autosave', JSON.stringify({ ts: stamp, qdds: STORE.qdds }));
-      } catch(e) {}
-      updateAutoSaveLabel(stamp);
-    }
-  }, 30000);
-}
-
-function updateAutoSaveLabel(isoTs) {
-  const el = document.getElementById('autosave-label');
-  if (!el) return;
-  if (isoTs) {
-    const d = new Date(isoTs);
-    el.textContent = `自动保存 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-  } else {
-    el.textContent = '';
-  }
-}
-
-// ===== Editor page events (re-bound each time editor page is shown) =====
-function bindEditorEvents() {
-  const $addStepBtn    = document.getElementById('addStepBtn');
-  const $layoutSelect  = document.getElementById('layoutSelect');
-  const $questTitleInput = document.getElementById('questTitle');
-  const $importFileInput = document.getElementById('importFile');
-  const $exportPngBtn  = document.getElementById('exportPngBtn');
-  const $exportPdfBtn  = document.getElementById('exportPdfBtn');
-  const $backBtn       = document.getElementById('backToHomeBtn');
-  const $slider        = document.getElementById('colWidthSlider');
-  const $label         = document.getElementById('colWidthVal');
-
-  if ($addStepBtn)    $addStepBtn.addEventListener('click', () => openStepEditor(null));
-  if ($layoutSelect)  {
-    $layoutSelect.value = STATE.layout;
-    $layoutSelect.addEventListener('change', e => { STATE.layout = e.target.value; savePrefs(); renderPreview(); });
-  }
-  if ($questTitleInput) {
-    $questTitleInput.value = STATE.questTitle;
-    $questTitleInput.addEventListener('input', e => {
-      STATE.questTitle = e.target.value;
-      const qdd = getCurrentQdd();
-      if (qdd) { qdd.title = e.target.value; saveAllQdds(); }
-      renderPreview();
-    });
-  }
-  if ($importFileInput) $importFileInput.addEventListener('change', handleImportFile);
-  if ($exportPngBtn)    $exportPngBtn.addEventListener('click', exportPng);
-  if ($exportPdfBtn)    $exportPdfBtn.addEventListener('click', exportPdf);
-  if ($backBtn) $backBtn.addEventListener('click', showHomePage);
-  if ($slider) {
-    $slider.value = STATE.colWidth;
-    if ($label) $label.textContent = STATE.colWidth;
-    $slider.addEventListener('input', e => {
-      STATE.colWidth = parseInt(e.target.value, 10);
-      if ($label) $label.textContent = STATE.colWidth;
-      savePrefs();
-      renderPreview();
-    });
-  }
-  // Sync theme select
-  const $ts = document.getElementById('themeSelect');
-  if ($ts) $ts.value = STATE.theme;
-
-  // Undo / Redo buttons
-  const $undoBtn = document.getElementById('undoBtn');
-  const $redoBtn = document.getElementById('redoBtn');
-  if ($undoBtn) $undoBtn.addEventListener('click', undoHistory);
-  if ($redoBtn) $redoBtn.addEventListener('click', redoHistory);
-  updateUndoRedoUI();
-
-  // Backup JSON
-  const $backupBtn = document.getElementById('backupJsonBtn');
-  if ($backupBtn) $backupBtn.addEventListener('click', exportBackupJson);
-
-  // Restore JSON
-  const $restoreInput = document.getElementById('restoreJsonFile');
-  if ($restoreInput) $restoreInput.addEventListener('change', handleRestoreJson);
-
-  // AI Import Panel
-  const $aiImportBtn = document.getElementById('aiImportBtn');
-  if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
-}
-
-const THEME_ICONS = { light: '☀️', dark: '🌙', cyber: '💜' };
-
-function applyTheme(theme) {
-  STATE.theme = theme;
-  document.body.className = `theme-${theme}`;
-  // Update theme icon in toolbar if present
-  const icon = document.getElementById('theme-icon');
-  if (icon) icon.textContent = THEME_ICONS[theme] || '🎨';
-  // Keep select in sync
-  const sel = document.getElementById('themeSelect');
-  if (sel) sel.value = theme;
+function buildEditorPageHTML() {
+  return `
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <span class="app-title">QDD Flow</span>
+        <button class="tb-btn tb-back-btn" id="backToHomeBtn">← 返回</button>
+        <span class="quest-name-wrap">
+          <input type="text" id="questTitle" placeholder="任务名称..." value="${esc(STATE.questTitle)}">
+        </span>
+      </div>
+      <div class="toolbar-center">
+        <label class="tb-btn" title="布局切换">
+          <span>布局</span>
+          <select id="layoutSelect">
+            <option value="table">📋 表格式</option>
+            <option value="timeline">🎯 时间轴式</option>
+          </select>
+        </label>
+        <label class="tb-btn" title="主题">
+          <span>主题</span>
+          <select id="themeSelect">
+            <option value="light">☀️ 亮色</option>
+            <option value="dark">🌙 深色</option>
+            <option value="cyber">💜 赛博</option>
+          </select>
+        </label>
+        <label class="tb-btn tb-slider-btn" title="调整列宽">
+          <span>列宽 <span id="colWidthVal">${STATE.colWidth}</span>px</span>
+          <input type="range" id="colWidthSlider" min="120" max="380" step="10" value="${STATE.colWidth}">
+        </label>
+      </div>
+      <div class="toolbar-right">
+        <button class="tb-btn tb-undo-btn" id="undoBtn" disabled title="撤回 (Ctrl+Z)">↩ 撤回</button>
+        <button class="tb-btn tb-undo-btn" id="redoBtn" disabled title="重做 (Ctrl+Y)">↪ 重做</button>
+        <span class="tb-divider"></span>
+        <label class="tb-btn icon-btn" title="导入Excel/CSV">
+          📂 导入
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none">
+        </label>
+        <label class="tb-btn icon-btn" title="从JSON备份文件恢复">
+          📥 恢复
+          <input type="file" id="restoreJsonFile" accept=".json" style="display:none">
+        </label>
+        <button class="tb-btn" id="backupJsonBtn" title="导出全部数据为JSON备份文件">💾 备份</button>
+        <button class="tb-btn tb-btn-ai" id="aiImportBtn" title="用AI生成QDD结构并导入">🤖 AI 导入</button>
+        <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
+        <span id="autosave-label" class="tb-autosave-label"></span>
+        <button class="tb-btn" id="exportPngBtn">🖼️ 导出PNG</button>
+        <button class="tb-btn" id="exportPdfBtn">📄 导出PDF</button>
+      </div>
+    </header>
+    <div id="main">
+      <aside id="editor-panel">
+        <div id="editor-panel-header">
+          <span>环节列表</span>
+          <small id="step-count">0 个环节</small>
+          <button class="sl-batch-toggle" id="slBatchToggle" onclick="toggleBatchMode()">批量操作</button>
+        </div>
+        <div id="steps-list"></div>
+        <div id="steps-list-footer">
+          <div class="batch-action-bar hidden" id="slBatchBar">
+            <button class="sl-select-all-btn" onclick="selectAllSteps()">全选</button>
+            <button class="sl-batch-del-btn" onclick="batchDeleteSteps()">🗑 删除所选</button>
+            <button class="sl-batch-cancel-btn" onclick="toggleBatchMode()">取消</button>
+          </div>
+          <div class="sl-add-row">
+            <button class="sl-add-btn" onclick="addStep()">＋ 添加环节</button>
+            <input type="number" id="addCountInput" min="1" max="20" value="1" title="一次添加多个" style="width:48px">
+            <button class="sl-add-btn" onclick="addMultipleSteps()" title="批量添加">批量</button>
+          </div>
+        </div>
+      </aside>
+      <main id="preview-area">
+        <div id="preview-scroll-wrap">
+          <div id="preview-canvas"></div>
+        </div>
+      </main>
+      <!-- Step Property Panel: fixed right column -->
+      <div id="step-prop-panel" class="prop-panel prop-panel-hidden">
+        <div class="prop-panel-header">
+          <span class="prop-panel-title" id="prop-panel-title">环节属性</span>
+          <button class="prop-panel-close" onclick="closeStepPanel()" title="关闭">×</button>
+        </div>
+        <div class="prop-panel-body" id="prop-panel-body">
+          <!-- filled by renderStepPanel() -->
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // ===== Render All =====
@@ -311,298 +263,213 @@ function deleteStep(id) {
 }
 
 // ===== Step Editor Modal =====
-// ===== Step Property Panel =====
-let _propPanelStepId = null;
+function openStepEditor(id) {
+  STATE.editingStepId = id;
+  const step = id ? STATE.steps.find(s => s.id === id) : null;
+  const modal = document.getElementById('step-editor');
+  modal.classList.remove('hidden');
 
-function openStepPanel(stepId) {
-  // Toggle: clicking same header again closes the panel
-  if (_propPanelStepId === stepId) {
-    closeStepPanel();
-    return;
-  }
-  _propPanelStepId = stepId;
-  STATE.activeStepId = stepId;
-  renderStepsList(); // highlight active in left list
+  const title = step ? `编辑环节：${step.name}` : '新增环节';
+  const currentTaskType = step?.taskType || '';
+  // Color: use colorOverride if set, else derive from taskType, else preset
+  const defaultColor = currentTaskType && TASK_TYPE_MAP[currentTaskType]
+    ? TASK_TYPE_MAP[currentTaskType].color
+    : (PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length]);
+  const selectedColor = step?.colorOverride || step?.color || defaultColor;
 
-  const panel = document.getElementById('step-prop-panel');
-  if (!panel) return;
-  panel.classList.remove('prop-panel-hidden');
-  renderStepPanel();
-}
-
-function closeStepPanel() {
-  _propPanelStepId = null;
-  const panel = document.getElementById('step-prop-panel');
-  if (panel) panel.classList.add('prop-panel-hidden');
-  // Remove active highlight
-  STATE.activeStepId = null;
-  renderStepsList();
-}
-
-function renderStepPanel() {
-  const body = document.getElementById('prop-panel-body');
-  const titleEl = document.getElementById('prop-panel-title');
-  if (!body) return;
-
-  const step = STATE.steps.find(s => s.id === _propPanelStepId);
-  if (!step) { closeStepPanel(); return; }
-
-  if (titleEl) titleEl.textContent = step.name || '未命名环节';
-
-  // Ensure step has images array (backwards compat)
-  if (!step.images) step.images = step.imageUrl ? [step.imageUrl] : [];
-
-  // Task type options
-  const taskTypeOpts = TASK_TYPES.map(t =>
-    `<option value="${esc(t.value)}"${t.value === (step.taskType||'') ? ' selected' : ''}>${esc(t.label)}</option>`
+  const taskTypeOptionsHtml = TASK_TYPES.map(t =>
+    `<option value="${t.value}"${t.value === currentTaskType ? ' selected' : ''}>${t.label}</option>`
   ).join('');
 
-  // Trigger options
-  const triggerOpts = ['', ...TRIGGER_OPTIONS].map(v =>
-    `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
+  const triggerOptionsHtml = ['', ...TRIGGER_OPTIONS].map(v =>
+    `<option value="${v}"${v === (step?.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
-  // Custom fields rows
-  const cfRows = (step.customFields || []).map((f, fi) => `
-    <div class="pp-cf-row" data-fi="${fi}">
-      <input class="pp-cf-key" type="text" placeholder="参数名" value="${esc(f.key)}"
-        onchange="updateCustomFieldKey('${step.id}',${fi},this.value)">
-      <input class="pp-cf-val" type="text" placeholder="参数值" value="${esc(f.value)}"
-        onchange="updateCustomFieldVal('${step.id}',${fi},this.value)">
-      <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="删除此字段">×</button>
-    </div>`).join('');
+  const colorDotsHtml = PRESET_COLORS.map(c =>
+    `<span class="color-preset-dot${c === selectedColor ? ' selected' : ''}" style="background:${c}" data-color="${c}" onclick="selectPresetColor('${c}')"></span>`
+  ).join('');
 
-  // Images list
-  const imgItems = (step.images || []).map((url, ii) => `
-    <div class="pp-img-item" data-ii="${ii}">
-      <img src="${esc(url)}" alt="图${ii+1}" onclick="openImagePreview('${esc(url)}')">
-      <button class="pp-img-del" onclick="deletePanelImage('${step.id}',${ii})" title="删除">×</button>
-    </div>`).join('');
+  const customFieldsHtml = (step?.customFields || []).map((f, fi) =>
+    renderCustomFieldRow(fi, f.key, f.value)
+  ).join('');
 
-  body.innerHTML = `
-    <div class="pp-section">
-      <label class="pp-label">环节名称</label>
-      <input class="pp-input" type="text" id="pp-name" value="${esc(step.name||'')}"
-        oninput="savePanelField('${step.id}','name',this.value)">
-    </div>
-
-    <div class="pp-section pp-row2">
-      <div>
-        <label class="pp-label">任务类型</label>
-        <select class="pp-select" id="pp-tasktype"
-          onchange="savePanelTaskType('${step.id}',this.value)">${taskTypeOpts}</select>
+  modal.innerHTML = `
+    <div class="editor-modal">
+      <div class="editor-modal-header">
+        <h3>${title}</h3>
+        <button class="editor-modal-close" onclick="closeStepEditor()">×</button>
       </div>
-      <div>
-        <label class="pp-label">触发方式</label>
-        <select class="pp-select" id="pp-trigger"
-          onchange="savePanelField('${step.id}','trigger',this.value)">${triggerOpts}</select>
-      </div>
-    </div>
-
-    <div class="pp-section">
-      <label class="pp-label">位置</label>
-      <input class="pp-input" type="text" id="pp-location" placeholder="如：武康大楼·大厅"
-        value="${esc(step.location||'')}" oninput="savePanelField('${step.id}','location',this.value)">
-    </div>
-
-    <div class="pp-section">
-      <label class="pp-label">出场人物</label>
-      <input class="pp-input" type="text" id="pp-characters" placeholder="如：柚柠, 程醒"
-        value="${esc(step.characters||'')}" oninput="savePanelField('${step.id}','characters',this.value)">
-    </div>
-
-    <div class="pp-section">
-      <label class="pp-label">描述</label>
-      <textarea class="pp-textarea" id="pp-desc"
-        oninput="savePanelField('${step.id}','desc',this.value)">${esc(step.desc||'')}</textarea>
-    </div>
-
-    <div class="pp-section">
-      <label class="pp-label">配图
-        <button class="pp-img-add-btn" onclick="addPanelImage('${step.id}')" title="从文件选择">＋ 添加</button>
-      </label>
-      <div class="pp-img-list" id="pp-img-list-${step.id}">
-        ${imgItems}
-        <div class="pp-img-drop-zone" data-step-id="${step.id}"
-          onclick="addPanelImage('${step.id}')"
-          tabindex="0"
-          title="点击添加 / 拖入图片 / Ctrl+V">
-          📷 拖入或点击添加
+      <div class="editor-modal-body">
+        <div class="form-row">
+          <label>环节名称 *</label>
+          <input type="text" id="ef-name" placeholder="如：0.任务接取" value="${esc(step?.name||'')}">
+        </div>
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>任务类型</label>
+            <select id="ef-tasktype" onchange="onTaskTypeChange(this.value)">
+              ${taskTypeOptionsHtml}
+            </select>
+          </div>
+          <div class="form-row">
+            <label>触发方式</label>
+            <select id="ef-trigger">
+              ${triggerOptionsHtml}
+            </select>
+          </div>
+          <div class="form-row">
+            <label>位置</label>
+            <input type="text" id="ef-location" placeholder="如：武康大楼·大厅" value="${esc(step?.location||'')}">
+          </div>
+        </div>
+        <div class="form-row">
+          <label>出场人物</label>
+          <input type="text" id="ef-characters" placeholder="如：柚柠, 程醒" value="${esc(step?.characters||'')}">
+        </div>
+        <div class="form-row">
+          <label>环节描述</label>
+          <textarea id="ef-desc" placeholder="描述环节发生的事情...">${esc(step?.desc||'')}</textarea>
+        </div>
+        <div class="form-row">
+          <label>配图</label>
+          <div class="image-upload-area" id="ef-image-drop-zone">
+            <div class="image-upload-preview" id="ef-image-preview">
+              ${step?.imageUrl ? `<img src="${esc(step.imageUrl)}" alt="预览">` : '<span class="image-upload-hint">📷 拖入图片 / Ctrl+V 粘贴 / 点击选择</span>'}
+            </div>
+            <div class="image-upload-actions">
+              <button type="button" class="img-action-btn" onclick="triggerImageFileSelect()">📂 本地选择</button>
+              <button type="button" class="img-action-btn img-clear-btn" onclick="clearImageField()" id="ef-image-clear" ${step?.imageUrl ? '' : 'style="display:none"'}>✕ 清除</button>
+              <input type="file" id="ef-image-file" accept="image/*" style="display:none" onchange="handleImageFileChange(this)">
+            </div>
+            <div class="image-upload-url-row">
+              <input type="url" id="ef-image" placeholder="或填入网络图片地址 https://..." value="${esc(step?.imageUrl||'')}" oninput="handleImageUrlInput(this.value)">
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>环节颜色</label>
+          <div class="color-row">
+            <div class="color-presets" id="color-presets">${colorDotsHtml}</div>
+            <input type="color" id="ef-color-picker" value="${selectedColor}" style="width:32px;height:32px;border:none;background:none;cursor:pointer;padding:0;border-radius:4px;" title="自定义颜色" onchange="syncPickerColor(this.value)">
+          </div>
+        </div>
+        <div class="custom-fields-section">
+          <h4>🔧 自定义字段</h4>
+          <div id="custom-fields-list">${customFieldsHtml}</div>
+          <button class="add-custom-field-btn" onclick="addCustomFieldRow()">＋ 添加自定义字段</button>
         </div>
       </div>
-    </div>
-
-    <div class="pp-section">
-      <label class="pp-label">自定义字段
-        <button class="pp-cf-add-btn" onclick="addCustomField('${step.id}')">＋ 添加字段</button>
-      </label>
-      <div class="pp-cf-list" id="pp-cf-list">${cfRows}</div>
-    </div>
-
-    <div class="pp-section pp-danger-zone">
-      <button class="pp-del-step-btn" onclick="deletePanelStep('${step.id}')">🗑 删除此环节</button>
-      <button class="pp-add-step-btn" onclick="addStep()">＋ 在此后新增环节</button>
+      <div class="editor-modal-footer">
+        <button class="btn-cancel" onclick="closeStepEditor()">取消</button>
+        <button class="btn-primary" onclick="saveStep()">保存</button>
+      </div>
     </div>
   `;
-
-  // Bind drag-drop on the image drop zone
-  bindPanelImageDropZone(step.id);
+  // Set initial color picker hidden input
+  modal.querySelector('#ef-color-picker').dataset.selected = selectedColor;
+  // Bind image drop zone events
+  bindImageDropZone();
 }
 
-// ── Panel field savers ──
-function savePanelField(stepId, field, val) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
-  step[field] = val;
-  saveAllQdds();
-  // Live-refresh preview without closing panel
-  if (field === 'name') {
-    const titleEl = document.getElementById('prop-panel-title');
-    if (titleEl) titleEl.textContent = val || '未命名环节';
-    renderStepsList();
+function renderCustomFieldRow(index, key='', value='') {
+  return `
+    <div class="custom-field-row" data-fi="${index}">
+      <input type="text" placeholder="字段名" value="${esc(key)}" class="cf-key">
+      <input type="text" placeholder="值" value="${esc(value)}" class="cf-val">
+      <button class="custom-field-del" onclick="removeCustomFieldRow(this)">✕</button>
+    </div>
+  `;
+}
+
+function addCustomFieldRow() {
+  const list = document.getElementById('custom-fields-list');
+  const div = document.createElement('div');
+  div.innerHTML = renderCustomFieldRow(Date.now());
+  list.appendChild(div.firstElementChild);
+}
+
+function removeCustomFieldRow(btn) {
+  btn.closest('.custom-field-row').remove();
+}
+
+function selectPresetColor(color) {
+  document.querySelectorAll('.color-preset-dot').forEach(d => d.classList.remove('selected'));
+  const dot = document.querySelector(`.color-preset-dot[data-color="${color}"]`);
+  if (dot) dot.classList.add('selected');
+  const picker = document.getElementById('ef-color-picker');
+  if (picker) { picker.value = color; picker.dataset.selected = color; }
+}
+
+function syncPickerColor(color) {
+  document.querySelectorAll('.color-preset-dot').forEach(d => d.classList.remove('selected'));
+  const picker = document.getElementById('ef-color-picker');
+  if (picker) picker.dataset.selected = color;
+}
+
+function getSelectedColor() {
+  const picker = document.getElementById('ef-color-picker');
+  return picker?.dataset.selected || picker?.value || PRESET_COLORS[0];
+}
+
+function onTaskTypeChange(typeVal) {
+  // Auto-fill color from taskType, but allow manual override afterwards
+  if (typeVal && TASK_TYPE_MAP[typeVal]) {
+    const autoColor = TASK_TYPE_MAP[typeVal].color;
+    selectPresetColor(autoColor);
+    // Also update the color picker
+    const picker = document.getElementById('ef-color-picker');
+    if (picker) { picker.value = autoColor; picker.dataset.selected = autoColor; }
   }
-  // Partial re-render: just re-render the preview (fast)
-  renderPreview();
 }
 
-function savePanelTaskType(stepId, typeValue) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
-  step.taskType = typeValue;
-  step.colorOverride = null;
-  saveAllQdds();
-  renderStepsList();
-  renderPreview();
+function closeStepEditor() {
+  document.getElementById('step-editor').classList.add('hidden');
+  STATE.editingStepId = null;
 }
 
-function updateCustomFieldKey(stepId, fi, val) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step || !step.customFields[fi]) return;
-  step.customFields[fi].key = val;
-  saveAllQdds();
-  renderPreview();
-}
-function updateCustomFieldVal(stepId, fi, val) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step || !step.customFields[fi]) return;
-  step.customFields[fi].value = val;
-  saveAllQdds();
-  renderPreview();
-}
-function addCustomField(stepId) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
-  if (!step.customFields) step.customFields = [];
-  step.customFields.push({ key: '', value: '' });
-  saveAllQdds();
-  renderStepPanel();
-  renderPreview();
-}
-function deleteCustomField(stepId, fi) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
-  step.customFields.splice(fi, 1);
-  saveAllQdds();
-  renderStepPanel();
-  renderPreview();
-}
+function saveStep() {
+  const name = document.getElementById('ef-name').value.trim();
+  if (!name) { alert('请填写环节名称！'); return; }
 
-function deletePanelStep(stepId) {
-  if (!confirm('确认删除此环节？')) return;
-  STATE.steps = STATE.steps.filter(s => s.id !== stepId);
-  const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
-  closeStepPanel();
-  renderAll();
-  showToast('环节已删除');
-}
-
-function getPrevStepDefaults() {
-  // Get the step that is currently active/open in the panel, or the last step
-  const refId = _propPanelStepId || (STATE.steps.length > 0 ? STATE.steps[STATE.steps.length - 1].id : null);
-  const ref = refId ? STATE.steps.find(s => s.id === refId) : null;
-  if (!ref) return {};
-  return {
-    trigger:    ref.trigger    || '',
-    location:   ref.location   || '',
-    characters: ref.characters || '',
-    taskType:   ref.taskType   || '',
-  };
-}
-
-function addStep() {
-  const defaults = getPrevStepDefaults();
-  const newStep = {
-    id: genId(), name: '新环节',
-    trigger:    defaults.trigger,
-    location:   defaults.location,
-    characters: defaults.characters,
-    taskType:   defaults.taskType,
-    desc: '', imageUrl: '', images: [], color: '', customFields: [],
-  };
-  // Insert after active step, or at end
-  const idx = _propPanelStepId
-    ? STATE.steps.findIndex(s => s.id === _propPanelStepId)
-    : -1;
-  if (idx >= 0) STATE.steps.splice(idx + 1, 0, newStep);
-  else STATE.steps.push(newStep);
-  const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
-  renderAll();
-  openStepPanel(newStep.id);
-}
-
-function addMultipleSteps() {
-  const countInput = document.getElementById('addCountInput');
-  const count = Math.max(1, Math.min(20, parseInt(countInput?.value || '1', 10)));
-  const defaults = getPrevStepDefaults();
-  for (let i = 0; i < count; i++) {
-    STATE.steps.push({
-      id: genId(), name: `新环节`,
-      trigger:    defaults.trigger,
-      location:   defaults.location,
-      characters: defaults.characters,
-      taskType:   defaults.taskType,
-      desc: '', imageUrl: '', images: [], color: '', customFields: [],
-    });
-  }
-  const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
-  renderAll();
-  showToast(`已添加 ${count} 个环节`);
-}
-
-// ── Panel image management ──
-function addPanelImage(stepId) {
-  _openImageFilePicker(stepId, 'panel');
-}
-
-function deletePanelImage(stepId, ii) {
-  const step = STATE.steps.find(s => s.id === stepId);
-  if (!step || !step.images) return;
-  step.images.splice(ii, 1);
-  // Keep legacy imageUrl in sync
-  step.imageUrl = step.images[0] || '';
-  saveAllQdds();
-  renderStepPanel();
-  renderPreview();
-}
-
-function bindPanelImageDropZone(stepId) {
-  const zone = document.querySelector(`#pp-img-list-${stepId} .pp-img-drop-zone`);
-  if (!zone) return;
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('qt-img-drop-hover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('qt-img-drop-hover'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('qt-img-drop-hover');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      _inlineImgTargetId = stepId;
-      _inlineImgTargetMode = 'panel';
-      readInlineImageFile(file, stepId);
-    }
+  const customFields = [];
+  document.querySelectorAll('#custom-fields-list .custom-field-row').forEach(row => {
+    const key = row.querySelector('.cf-key').value.trim();
+    const val = row.querySelector('.cf-val').value.trim();
+    if (key) customFields.push({ key, value: val });
   });
-  // Ctrl+V paste on panel zone (focused)
-  zone.addEventListener('focus', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
-  zone.addEventListener('blur',  () => { setTimeout(() => { if (_focusedImgZoneId === stepId) { _focusedImgZoneId = null; _focusedImgZoneMode = null; } }, 500); });
-  // Click also sets focus state (since onclick=addPanelImage steals focus before paste can fire)
-  zone.addEventListener('mousedown', () => { _focusedImgZoneId = stepId; _focusedImgZoneMode = 'panel'; _inlineImgTargetMode = 'panel'; });
+
+  const taskType = document.getElementById('ef-tasktype')?.value || '';
+  const autoColor = taskType && TASK_TYPE_MAP[taskType] ? TASK_TYPE_MAP[taskType].color : null;
+  const pickedColor = getSelectedColor();
+  // colorOverride = manual if it differs from the auto color for this taskType
+  const colorOverride = (autoColor && pickedColor !== autoColor) ? pickedColor : null;
+
+  const data = {
+    name,
+    taskType,
+    trigger: document.getElementById('ef-trigger')?.value || '',
+    location: document.getElementById('ef-location').value.trim(),
+    characters: document.getElementById('ef-characters').value.trim(),
+    desc: document.getElementById('ef-desc').value.trim(),
+    imageUrl: document.getElementById('ef-image').value.trim(),
+    color: pickedColor,
+    colorOverride,
+    customFields,
+  };
+
+  const wasEditing = STATE.editingStepId;
+  if (wasEditing) {
+    const i = STATE.steps.findIndex(s => s.id === wasEditing);
+    if (i >= 0) STATE.steps[i] = { ...STATE.steps[i], ...data };
+  } else {
+    STATE.steps.push({ id: genId(), ...data });
+  }
+
+  // Auto-save to localStorage
+  const qdd = getCurrentQdd();
+  if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
+
+  closeStepEditor();
+  renderAll();
+  showToast(wasEditing ? '环节已更新' : '环节已添加');
 }

@@ -1,52 +1,3 @@
-
-// ===== JSON Backup / Restore =====
-function exportBackupJson() {
-  // Sync current state before export
-  const qdd = getCurrentQdd();
-  if (qdd) syncQddFromState(qdd);
-
-  const payload = {
-    _version: 1,
-    _exportedAt: new Date().toISOString(),
-    qdds: STORE.qdds,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  const ts   = new Date().toISOString().slice(0,16).replace(/[T:]/g, '-');
-  a.href     = url;
-  a.download = `QDDFlow_backup_${ts}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('✓ 备份已导出');
-}
-
-function handleRestoreJson(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const payload = JSON.parse(ev.target.result);
-      const qdds = payload.qdds || payload; // support both wrapped and raw array
-      if (!Array.isArray(qdds)) throw new Error('格式不对');
-      if (!confirm(`确认用备份文件覆盖当前所有 QDD 数据？（共 ${qdds.length} 个 QDD）\n此操作不可撤销。`)) return;
-      // Push current state to history before overwriting
-      pushHistory();
-      STORE.qdds = qdds;
-      saveAllQdds();
-      showToast(`✓ 已恢复 ${qdds.length} 个 QDD`);
-      // Go back to home to re-select
-      showHomePage();
-    } catch(err) {
-      alert('读取备份失败：' + err.message);
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = ''; // reset for re-select
-}
-
-// ===== View: Home Page =====
 // ===== Import Excel/CSV =====
 function handleImportFile(e) {
   const file = e.target.files[0];
@@ -259,3 +210,29 @@ async function exportPng() {
 }
 
 // ===== Export PDF =====
+async function exportPdf() {
+  showToast('📄 正在生成PDF...');
+  const previewCanvas = document.getElementById('preview-canvas');
+  const target = previewCanvas && previewCanvas.firstElementChild;
+  if (!target) { showToast('❌ 没有内容可导出'); return; }
+  const titleInput = document.getElementById('questTitle');
+  try {
+    const canvas = await _captureNode(target, 1.5);
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const pw = canvas.width;
+    const ph = canvas.height;
+    const pdfScale = 0.264583;
+    const pdfW = pw * pdfScale;
+    const pdfH = ph * pdfScale;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pdfW, pdfH] });
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+    pdf.save(`QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`);
+    showToast('✅ PDF 已导出');
+  } catch (e) {
+    showToast('❌ 导出失败：' + e.message);
+  }
+}
+
+// ===== Toast =====
+let toastTimer = null;
