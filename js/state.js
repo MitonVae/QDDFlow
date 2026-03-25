@@ -32,11 +32,13 @@ function loadAllQdds() {
     const raw = localStorage.getItem(STORAGE_KEYS.qdds);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // 清理占位符：__img__ 表示图片因配额问题未能持久化
+    // 清理旧版占位符和 idb: 引用（这些在当前版本无法显示）
     data.forEach(q => {
       (q.steps || []).forEach(s => {
-        if (s.imageUrl === '__img__') s.imageUrl = '';
-        if (Array.isArray(s.images)) s.images = s.images.filter(u => u !== '__img__');
+        if (!s.imageUrl || s.imageUrl === '__img__' || s.imageUrl.startsWith('idb:')) {
+          s.imageUrl = '';
+        }
+        s.images = [];
       });
     });
     return data;
@@ -125,34 +127,18 @@ function scheduleHistoryPush() {
 
 function saveAllQdds() {
   if (!HISTORY._skipNext) scheduleHistoryPush();
-
-  // 在序列化前，把所有仍是 base64 dataUrl 的图片替换为空（占位），
-  // 以防 IndexedDB 迁移尚未完成时 saveAllQdds 被意外调用。
-  // 真正的 base64 应由调用方先通过 migrateAllImagesToDb() 存入 IndexedDB。
-  const toSave = STORE.qdds.map(q => ({
-    ...q,
-    steps: (q.steps || []).map(s => {
-      const url = s.imageUrl || '';
-      // base64 dataUrl：以 data: 开头的大字符串，直接存会超限，替换为空
-      if (url.startsWith('data:')) {
-        return { ...s, imageUrl: '', images: [] };
-      }
-      return s;
-    }),
-  }));
-
   try {
-    localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(toSave));
+    localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
   } catch (e) {
     if (e.name === 'QuotaExceededError') {
-      // 仍然超限（idb: key 很小，不应发生），做最后兜底
+      // 图片 base64 太大，存一份不含图片的版本保留其他数据
       try {
-        const slim = toSave.map(q => ({
+        const slim = STORE.qdds.map(q => ({
           ...q,
           steps: q.steps.map(s => ({ ...s, imageUrl: '', images: [] }))
         }));
         localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(slim));
-        console.warn('[saveAllQdds] 仍然超限，已清空图片引用');
+        showToast('⚠️ 图片过大无法保存，其他数据已保留');
       } catch (e2) {
         console.error('[saveAllQdds] localStorage 完全写入失败', e2);
       }

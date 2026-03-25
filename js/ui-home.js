@@ -115,7 +115,5 @@ function openQdd(id) {
   if (im) im.classList.add('hidden');
 
   bindEditorEvents();
-  renderAll(); // 立即渲染，用户马上看到内容（图片此时可能还没加载）
-  // 后台预热图片缓存，完成后刷新预览以显示图片
-  _preloadStepImages().then(() => renderPreview());
+  renderAll();
 }

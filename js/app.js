@@ -112,31 +112,18 @@ function init() {
   applyTheme(STATE.theme);
   bindGlobalEvents();
 
-  // 如果是分享链接，直接进入只读预览，不加载本地数据
+  // 如果是分享链接，直接进入只读预览
   if (window.location.hash.startsWith('#share=')) {
     tryLoadSharedQdd();
     return;
   }
 
-  // 先立即渲染页面（不等迁移），让用户马上看到内容
+  // 直接渲染，不等任何异步操作
   if (prefs.lastView === 'editor' && prefs.lastQdd) {
     const qdd = STORE.qdds.find(q => q.id === prefs.lastQdd);
-    if (qdd) {
-      openQdd(qdd.id);
-    } else {
-      showHomePage();
-    }
-  } else {
-    showHomePage();
+    if (qdd) { openQdd(qdd.id); return; }
   }
-
-  // 后台静默：迁移旧 base64 图片到 IndexedDB，完成后刷新图片显示
-  migrateAllImagesToDb().then(() => {
-    return _preloadStepImages();
-  }).then(() => {
-    // 若当前在编辑器，刷新预览以显示迁移后的图片
-    if (STATE.view === 'editor') renderPreview();
-  });
+  showHomePage();
 }
 
 function getSampleData() {
