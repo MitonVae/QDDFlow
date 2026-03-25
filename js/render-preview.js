@@ -57,7 +57,7 @@ function renderTableLayout() {
       </div>
     </div>`;
 
-    // ── Image ──
+    // ── Image：有图才渲染，无图不占行 ──
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
     const img = imgUrl
@@ -71,13 +71,13 @@ function renderTableLayout() {
                 onerror="this.style.display='none'">
            <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
          </div>`
-      : `<div class="qt-col-img qt-img-zone qt-col-img-empty" data-step-id="${sid}"
+      : `<div class="qt-col-img-add" data-step-id="${sid}"
              onclick="pickStepImage('${sid}')"
              ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
              ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
              ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="点击或拖入图片">
-           <span class="qt-img-empty-hint">📷 点击或拖入图片</span>
+             title="点击或拖入添加图片">
+           <span>＋ 添加图片</span>
          </div>`;
 
     // ── Fields: nested 2-col table [label | value] — skip empty rows ──
@@ -683,30 +683,31 @@ function renderTimelineLayout() {
     `;
   }).join('');
 
-  // ── Row 2: Image ──
+  // ── Row 2: Image（无图时不渲染，grid 自动折叠该行）──
   const imgCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
-    const imgHtml = imgUrl
-      ? `<div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
-             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
-             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
-             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="拖入图片可替换；双击放大">
-           <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
-                ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
-           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
-         </div>`
-      : `<div class="qt-img-zone tl-image-placeholder" data-step-id="${sid}"
-             onclick="pickStepImage('${sid}')"
-             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
-             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
-             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="点击或拖入图片">
-           <span>📷 点击或拖入图片</span>
-         </div>`;
-    return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">${imgHtml}</div>`;
+    if (!imgUrl) {
+      // 无图：渲染一个极小的占位触发区，不占视觉空间
+      return `<div class="tl-img-cell tl-img-add" style="grid-column:${colIdx};grid-row:2"
+                   onclick="pickStepImage('${sid}')"
+                   ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+                   ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+                   ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+                   title="点击或拖入添加图片">＋</div>`;
+    }
+    return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">
+      <div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
+           ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+           ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+           ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+           title="拖入图片可替换；双击放大">
+        <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
+             ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
+        <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
+      </div>
+    </div>`;
   }).join('');
 
   // ── Row 3: Meta (trigger / location / characters / custom) ──

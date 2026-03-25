@@ -235,13 +235,52 @@
   display: block;
 }
 
-.qt-col-img-empty {
-  height: 120px;
+/* 无图时的隐形添加区：高度极小，hover 才展开提示 */
+.qt-col-img-add {
+  height: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 11px;
+  color: transparent;
+  cursor: pointer;
+  border-bottom: 1px solid #000;
+  flex-shrink: 0;
+  transition: height 0.15s, color 0.15s, background 0.15s;
+  overflow: hidden;
+}
+.qt-col-img-add:hover,
+.qt-col-img-add.qt-img-drop-hover {
+  height: 36px;
   color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.qt-col-img-add.qt-img-drop-hover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+/* 时间轴无图添加区 */
+.tl-img-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: transparent;
+  cursor: pointer;
+  height: 4px;
+  transition: height 0.15s, color 0.15s, background 0.15s;
+  overflow: hidden;
+}
+.tl-img-add:hover,
+.tl-img-add.qt-img-drop-hover {
+  height: 36px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.tl-img-add.qt-img-drop-hover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
 }
 
 /* Multi-image wrap in table layout — vertical stack, images fill column width */
