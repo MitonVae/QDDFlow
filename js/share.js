@@ -16,8 +16,11 @@ async function _compress(str) {
   writer.write(bytes);
   writer.close();
   const buf = await new Response(cs.readable).arrayBuffer();
-  // base64url（不含 + / =）
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const arr = new Uint8Array(buf);
+  // 用循环拼接，避免 spread 展开大数组时栈溢出
+  let bin = '';
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  const b64 = btoa(bin);
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 

@@ -67,12 +67,6 @@ function bindEditorEvents() {
   const $importFile = document.getElementById('importFile');
   if ($importFile) $importFile.addEventListener('change', handleImportFile);
 
-  const $importJsonFile = document.getElementById('importJsonFile');
-  if ($importJsonFile) $importJsonFile.addEventListener('change', handleImportJson);
-
-  const $exportJsonBtn = document.getElementById('exportJsonBtn');
-  if ($exportJsonBtn) $exportJsonBtn.addEventListener('click', exportCurrentQddAsJson);
-
   const $aiImportBtn = document.getElementById('aiImportBtn');
   if ($aiImportBtn) $aiImportBtn.addEventListener('click', openAiImportPanel);
 

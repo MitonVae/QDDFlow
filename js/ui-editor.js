@@ -37,11 +37,6 @@ function buildEditorPageHTML() {
           📂 导入表格
           <input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none">
         </label>
-        <label class="tb-btn icon-btn" title="从 JSON 文件导入 QDD">
-          📥 导入 JSON
-          <input type="file" id="importJsonFile" accept=".json" style="display:none">
-        </label>
-        <button class="tb-btn" id="exportJsonBtn" title="将当前 QDD 导出为 JSON 文件（可导入或发给 AI）">📤 导出 JSON</button>
         <button class="tb-btn tb-btn-ai" id="aiImportBtn" title="用 AI 生成 QDD 结构并导入">🤖 AI 导入</button>
         <button class="tb-btn tb-btn-ai" id="aiExportBtn" title="将当前 QDD 导出为 AI 可读格式，方便让 AI 续写或分析">🤖 AI 导出</button>
         <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
