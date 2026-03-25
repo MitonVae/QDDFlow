@@ -133,27 +133,7 @@ async function _captureNode(target, scale) {
   const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
     .backgroundColor || '#ffffff';
 
-  // 1. 只临时解除「target 的祖先」的 overflow 裁切，
-  //    不动 target 内部——否则会破坏 table/flex 布局导致边框错位和图片拉伸
-  const overflowNodes = [];
-  let el = target.parentElement;
-  while (el && el !== document.body) {
-    const cs = getComputedStyle(el);
-    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
-      overflowNodes.push({
-        el,
-        overflow:  el.style.overflow,
-        overflowX: el.style.overflowX,
-        overflowY: el.style.overflowY,
-      });
-      el.style.overflow  = 'visible';
-      el.style.overflowX = 'visible';
-      el.style.overflowY = 'visible';
-    }
-    el = el.parentElement;
-  }
-
-  // 2. 等待 target 内所有图片加载完毕
+  // 等待所有图片加载完毕
   const imgs = Array.from(target.querySelectorAll('img'));
   await Promise.all(imgs.map(img =>
     img.complete ? Promise.resolve() : new Promise(r => {
@@ -161,23 +141,17 @@ async function _captureNode(target, scale) {
       img.addEventListener('error', r, { once: true });
     })
   ));
-
-  // 3. 等两帧让浏览器重新计算布局
-  await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  // 4. 获取 target 完整内容尺寸
+  // 快照每个元素的当前实际像素尺寸（在预览中真实渲染的值）
+  const allNodes = [target, ...target.querySelectorAll('*')];
+  const sizeSnapshot = allNodes.map(node => {
+    const r = node.getBoundingClientRect();
+    return { node, width: r.width, height: r.height };
+  });
+
   const W = target.scrollWidth;
   const H = target.scrollHeight;
-
-  // 临时把 target 宽度固定为 scrollWidth，防止 html2canvas 按视口折行
-  const prevWidth  = target.style.width;
-  const prevHeight = target.style.height;
-  target.style.width  = W + 'px';
-  target.style.height = H + 'px';
-
-  // 再等一帧
-  await new Promise(r => requestAnimationFrame(r));
 
   try {
     const canvas = await html2canvas(target, {
@@ -185,27 +159,41 @@ async function _captureNode(target, scale) {
       scale,
       useCORS: true,
       allowTaint: true,
-      scrollX: 0,
-      scrollY: 0,
+      scrollX: -window.scrollX,
+      scrollY: -window.scrollY,
       x: 0,
       y: 0,
       width:  W,
       height: H,
-      windowWidth:  window.innerWidth,
-      windowHeight: window.innerHeight,
+      windowWidth:  W,
+      windowHeight: H,
       logging: false,
+      // onclone：在克隆的 DOM 上把每个节点的宽高锁死为预览时的真实值
+      // 这样 html2canvas 重新布局时不会因 windowWidth 变化导致列宽改变
+      onclone(clonedDoc, clonedTarget) {
+        const clonedAll = [clonedTarget, ...clonedTarget.querySelectorAll('*')];
+        clonedAll.forEach((clonedNode, i) => {
+          const snap = sizeSnapshot[i];
+          if (!snap || snap.width === 0 || snap.height === 0) return;
+          // 只锁定有意义的元素（排除纯文本容器避免文字溢出）
+          const tag = clonedNode.tagName;
+          if (tag === 'SPAN' || tag === 'P' || tag === 'A') return;
+          clonedNode.style.width  = snap.width  + 'px';
+          clonedNode.style.height = snap.height + 'px';
+          clonedNode.style.flexShrink = '0';
+          clonedNode.style.flexGrow   = '0';
+          clonedNode.style.minWidth   = snap.width  + 'px';
+          clonedNode.style.minHeight  = snap.height + 'px';
+          clonedNode.style.maxWidth   = snap.width  + 'px';
+          clonedNode.style.maxHeight  = snap.height + 'px';
+          clonedNode.style.boxSizing  = 'border-box';
+          clonedNode.style.overflow   = 'visible';
+        });
+      },
     });
     return canvas;
   } finally {
-    // 还原 target 尺寸
-    target.style.width  = prevWidth;
-    target.style.height = prevHeight;
-    // 还原祖先 overflow
-    overflowNodes.forEach(({ el, overflow, overflowX, overflowY }) => {
-      el.style.overflow  = overflow;
-      el.style.overflowX = overflowX;
-      el.style.overflowY = overflowY;
-    });
+    // 无需还原——onclone 操作的是克隆 DOM，原始 DOM 未被修改
   }
 }
 
