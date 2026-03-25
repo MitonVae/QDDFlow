@@ -125,16 +125,20 @@ function confirmImport() {
 // ===== Export PNG / PDF =====
 
 /**
- * 截图核心：精确截取 target 元素，与屏幕预览完全一致。
+ * 截图核心：离屏克隆渲染方案
  *
  * 策略：
- * 1. 等所有图片加载完毕
- * 2. 临时解除所有祖先的 overflow 限制，让 html2canvas 能渲染完整内容
- * 3. 截 document.body，用 target 相对于文档的绝对偏移作为裁切区域
- * 4. 截完后还原 overflow
+ * 1. 把 target 深度克隆到一个绝对定位的离屏容器（position:fixed, left:-99999px）
+ * 2. 克隆节点宽度固定为原始 scrollWidth，高度 auto，不受任何父容器 overflow/flex 影响
+ * 3. 等待所有 img 加载完毕（src 已是真实 dataURL，不需要 CORS）
+ * 4. 对克隆节点直接截图，原始 DOM 完全不动，边框/布局不受任何干扰
+ * 5. 截完立即删除克隆节点
  */
 async function _captureNode(target, scale) {
-  // 等图片加载完成
+  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
+    .backgroundColor || '#ffffff';
+
+  // 1. 先确保原始节点的图片都加载完成
   await Promise.all(
     Array.from(target.querySelectorAll('img')).map(img =>
       img.complete
@@ -143,65 +147,99 @@ async function _captureNode(target, scale) {
     )
   );
 
-  // 收集并临时解除所有祖先（含 target 自身）的 overflow 限制
-  const overflowFixed = [];
-  let el = target;
-  while (el && el !== document.documentElement) {
-    const cs = getComputedStyle(el);
-    if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
-      overflowFixed.push({
-        el,
-        overflow:  el.style.overflow,
-        overflowX: el.style.overflowX,
-        overflowY: el.style.overflowY,
-      });
-      el.style.overflow  = 'visible';
-      el.style.overflowX = 'visible';
-      el.style.overflowY = 'visible';
+  // 2. 获取原始节点的实际渲染尺寸
+  const srcW = target.scrollWidth;
+  const srcH = target.scrollHeight;
+
+  // 3. 创建离屏容器：fixed 定位移出视口，不影响页面布局
+  const offscreen = document.createElement('div');
+  offscreen.style.cssText = [
+    'position:fixed',
+    'top:0',
+    'left:-99999px',
+    `width:${srcW}px`,
+    'height:auto',
+    'overflow:visible',
+    'z-index:-1',
+    'pointer-events:none',
+  ].join(';');
+
+  // 4. 深度克隆 target（含所有样式计算结果）
+  const clone = target.cloneNode(true);
+
+  // 强制克隆根节点尺寸与原始一致
+  clone.style.width    = srcW + 'px';
+  clone.style.height   = 'auto';
+  clone.style.overflow = 'visible';
+  clone.style.position = 'static';
+  clone.style.transform = 'none';
+
+  // 5. 把原始节点所有元素的计算后样式（尤其是 width/height）复制到克隆
+  //    这样 html2canvas 渲染克隆时，每个单元格/行的尺寸都与原始完全一致
+  const srcNodes   = [target,  ...target.querySelectorAll('*')];
+  const cloneNodes = [clone,   ...clone.querySelectorAll('*')];
+  srcNodes.forEach((src, i) => {
+    const dst = cloneNodes[i];
+    if (!dst) return;
+    const cs  = getComputedStyle(src);
+    const rect = src.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      dst.style.width     = rect.width  + 'px';
+      dst.style.height    = rect.height + 'px';
+      dst.style.minWidth  = rect.width  + 'px';
+      dst.style.minHeight = rect.height + 'px';
+      dst.style.maxWidth  = rect.width  + 'px';
+      dst.style.maxHeight = rect.height + 'px';
+      dst.style.boxSizing = 'border-box';
+      dst.style.flexShrink = '0';
+      dst.style.flexGrow   = '0';
     }
-    el = el.parentElement;
-  }
+    // 保留 overflow:visible 让内容不被裁切（边框不会消失）
+    dst.style.overflow  = 'visible';
+    dst.style.overflowX = 'visible';
+    dst.style.overflowY = 'visible';
+  });
 
-  // 等浏览器重新布局后再量尺寸
+  offscreen.appendChild(clone);
+  document.body.appendChild(offscreen);
+
+  // 6. 等两帧让浏览器完成布局
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
 
-  // target 相对于文档左上角的绝对偏移
-  // 用 scrollWidth/scrollHeight 获取完整内容尺寸（包含超出滚动区的部分）
-  const rect = target.getBoundingClientRect();
-  const absX = Math.round(rect.left + window.scrollX);
-  const absY = Math.round(rect.top  + window.scrollY);
-  const W    = Math.ceil(target.scrollWidth);
-  const H    = Math.ceil(target.scrollHeight);
+  // 7. 等克隆节点内的图片加载完（克隆的 img src 与原始相同，通常已经缓存）
+  await Promise.all(
+    Array.from(clone.querySelectorAll('img')).map(img =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise(r => { img.onload = r; img.onerror = r; })
+    )
+  );
 
-  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
-    .backgroundColor || '#ffffff';
+  const cloneW = clone.scrollWidth;
+  const cloneH = clone.scrollHeight;
 
-  let canvas;
   try {
-    canvas = await html2canvas(document.body, {
+    const canvas = await html2canvas(clone, {
       backgroundColor: bgColor,
       scale,
-      useCORS:     true,
-      allowTaint:  true,
-      x:           absX,
-      y:           absY,
-      width:       W,
-      height:      H,
-      windowWidth:  document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight,
-      scrollX:     0,
-      scrollY:     0,
-      logging:     false,
+      useCORS:      true,
+      allowTaint:   true,
+      x:            0,
+      y:            0,
+      width:        cloneW,
+      height:       cloneH,
+      windowWidth:  cloneW,
+      windowHeight: cloneH,
+      scrollX:      0,
+      scrollY:      0,
+      logging:      false,
     });
+    return canvas;
   } finally {
-    overflowFixed.forEach(({ el, overflow, overflowX, overflowY }) => {
-      el.style.overflow  = overflow;
-      el.style.overflowX = overflowX;
-      el.style.overflowY = overflowY;
-    });
+    // 8. 截图完成后立即删除离屏节点，不影响页面
+    document.body.removeChild(offscreen);
   }
-  return canvas;
 }
 
 async function exportPng() {
