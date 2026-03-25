@@ -28,21 +28,38 @@ function savePrefs() {
 
 // ===== Multi-QDD Store =====
 function loadAllQdds() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.qdds);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    // 清理旧版占位符和 idb: 引用（这些在当前版本无法显示）
-    data.forEach(q => {
-      (q.steps || []).forEach(s => {
-        if (!s.imageUrl || s.imageUrl === '__img__' || s.imageUrl.startsWith('idb:')) {
-          s.imageUrl = '';
-        }
-        s.images = [];
+  // 优先读 sessionStorage（本次会话的完整备份，不受配额裁剪影响）
+  // 若 sessionStorage 也没有，再读 localStorage
+  const sources = [
+    sessionStorage.getItem(STORAGE_KEYS.qdds),
+    localStorage.getItem(STORAGE_KEYS.qdds),
+  ];
+
+  for (const raw of sources) {
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data)) continue;
+
+      // 过滤掉 steps 明显为空但其他 source 可能更完整的情况
+      // 如果第一个来源（sessionStorage）有完整数据就用它
+      const totalSteps = data.reduce((n, q) => n + (q.steps || []).length, 0);
+      if (totalSteps === 0 && raw === sources[0] && sources[1]) {
+        // sessionStorage 里 steps 为空，尝试 localStorage
+        continue;
+      }
+
+      // 清理 idb: 引用（图片在 IndexedDB，当前同步渲染无法使用，置空即可，
+      //  异步的 _preloadStepImages 会在渲染前填入缓存）
+      data.forEach(q => {
+        (q.steps || []).forEach(s => {
+          if (s.imageUrl === '__img__') s.imageUrl = '';
+          // idb: 引用保留，让 getResolvedImageUrl 异步解析
+        });
       });
-    });
-    return data;
-  } catch(e) {}
+      return data;
+    } catch(e) { continue; }
+  }
   return null;
 }
 // ===== Undo / Redo History =====
@@ -127,18 +144,24 @@ function scheduleHistoryPush() {
 
 function saveAllQdds() {
   if (!HISTORY._skipNext) scheduleHistoryPush();
+
+  // 始终把完整数据（含 idb: 引用）存入 sessionStorage 作为本次会话备份
+  // sessionStorage 每次关闭标签页清空，不占用 localStorage 配额
+  try {
+    sessionStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
+  } catch(e) { /* sessionStorage 也满了，忽略 */ }
+
   try {
     localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(STORE.qdds));
   } catch (e) {
     if (e.name === 'QuotaExceededError') {
-      // 图片 base64 太大，存一份不含图片的版本保留其他数据
+      // 图片 base64/idb: 太大，只存文字数据，图片引用清空（图片在 IndexedDB 仍保留）
       try {
         const slim = STORE.qdds.map(q => ({
           ...q,
-          steps: q.steps.map(s => ({ ...s, imageUrl: '', images: [] }))
+          steps: (q.steps || []).map(s => ({ ...s, imageUrl: '', images: [] }))
         }));
         localStorage.setItem(STORAGE_KEYS.qdds, JSON.stringify(slim));
-        showToast('⚠️ 图片过大无法保存，其他数据已保留');
       } catch (e2) {
         console.error('[saveAllQdds] localStorage 完全写入失败', e2);
       }
