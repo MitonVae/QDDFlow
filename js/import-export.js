@@ -143,45 +143,44 @@ async function _captureNode(target, scale) {
     )
   );
 
-  // 2. 把原始 DOM 里每个 <img> 替换成按正确比例绘制的 <canvas>
-  //    记录替换关系，截完后还原
+  // 2. 把每个 <img> 替换成已按正确比例绘制好的 <canvas>，截图完再还原
+  //    目的：完全绕过 html2canvas 对 object-fit 的不完整支持
   const imgSwaps = [];
-  target.querySelectorAll('img').forEach(img => {
-    const containerW = img.offsetWidth;
-    const containerH = img.offsetHeight;
+  target.querySelectorAll('img').forEach(imgEl => {
+    const containerW = imgEl.offsetWidth;
+    const containerH = imgEl.offsetHeight;
     if (!containerW || !containerH) return;
 
-    const natW = img.naturalWidth  || containerW;
-    const natH = img.naturalHeight || containerH;
+    const natW = imgEl.naturalWidth  || containerW;
+    const natH = imgEl.naturalHeight || containerH;
 
-    const canvas = document.createElement('canvas');
-    canvas.width  = containerW * scale;
-    canvas.height = containerH * scale;
-    const ctx = canvas.getContext('2d');
+    const cvs = document.createElement('canvas');
+    cvs.width  = containerW * scale;
+    cvs.height = containerH * scale;
+    const ctx  = cvs.getContext('2d');
 
-    // 白色底
+    // 浅灰底（与 CSS 一致）
     ctx.fillStyle = '#f5f5f5';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-    // contain：按比例缩放，居中
-    const ratio   = Math.min(canvas.width / natW, canvas.height / natH);
-    const drawW   = natW * ratio;
-    const drawH   = natH * ratio;
-    const drawX   = (canvas.width  - drawW) / 2;
-    const drawY   = (canvas.height - drawH) / 2;
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    // contain：按比例缩放，居中绘制
+    const ratio = Math.min(cvs.width / natW, cvs.height / natH);
+    const drawW = natW * ratio;
+    const drawH = natH * ratio;
+    const drawX = (cvs.width  - drawW) / 2;
+    const drawY = (cvs.height - drawH) / 2;
+    ctx.drawImage(imgEl, drawX, drawY, drawW, drawH);
 
-    // 让 canvas 在页面里占同等空间
-    canvas.style.cssText = `width:${containerW}px;height:${containerH}px;display:block;`;
-
-    img.parentNode.insertBefore(canvas, img);
-    img.style.display = 'none';
-    imgSwaps.push({ img, canvas });
+    // 让 cvs 在页面中占与 img 相同的空间
+    cvs.style.cssText = `width:${containerW}px;height:${containerH}px;display:block;`;
+    imgEl.parentNode.insertBefore(cvs, imgEl);
+    imgEl.style.display = 'none';
+    imgSwaps.push({ imgEl, cvs });
   });
 
   const srcW = target.scrollWidth;
 
-  // 3. 离屏克隆
+  // 3. 离屏克隆（此时 DOM 里 img 已被 cvs 替换，克隆会包含 cvs）
   const offscreen = document.createElement('div');
   offscreen.style.cssText =
     `position:fixed;top:0;left:-99999px;width:${srcW}px;height:auto;` +
@@ -190,11 +189,11 @@ async function _captureNode(target, scale) {
   const clone = target.cloneNode(true);
   clone.style.cssText += `;width:${srcW}px;height:auto;overflow:visible;position:static;transform:none;`;
 
-  // 4. 锁定克隆中每个节点的尺寸（<canvas> 已经是正确尺寸，直接锁；<img> 已隐藏不用管）
+  // 4. 锁定克隆中每个节点的尺寸，防止 html2canvas 重排导致边框错位
   const srcNodes   = [target, ...target.querySelectorAll('*')];
   const cloneNodes = [clone,  ...clone.querySelectorAll('*')];
-  srcNodes.forEach((src, i) => {
-    const dst = cloneNodes[i];
+  srcNodes.forEach((src, idx) => {
+    const dst  = cloneNodes[idx];
     if (!dst) return;
     const rect = src.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
@@ -212,7 +211,7 @@ async function _captureNode(target, scale) {
     dst.style.overflowY  = 'visible';
   });
 
-  // 隐藏导出时不需要的元素
+  // 隐藏导出时不需要的元素（无图占位框等）
   clone.querySelectorAll('[data-export-hide]').forEach(el => { el.style.display = 'none'; });
 
   offscreen.appendChild(clone);
@@ -224,12 +223,10 @@ async function _captureNode(target, scale) {
   const cloneW = clone.scrollWidth;
   const cloneH = clone.scrollHeight;
 
-  const bgColor = '#ffffff';
-
-  let canvas;
+  let result;
   try {
-    canvas = await html2canvas(clone, {
-      backgroundColor: bgColor,
+    result = await html2canvas(clone, {
+      backgroundColor: '#ffffff',
       scale,
       useCORS:      true,
       allowTaint:   true,
@@ -245,13 +242,13 @@ async function _captureNode(target, scale) {
     });
   } finally {
     // 5. 还原：删离屏容器，恢复原始 img
-    document.body.removeChild(offscreen);
-    imgSwaps.forEach(({ img, canvas: c }) => {
-      img.style.display = '';
-      if (c.parentNode) c.parentNode.removeChild(c);
+    if (offscreen.parentNode) document.body.removeChild(offscreen);
+    imgSwaps.forEach(({ imgEl, cvs }) => {
+      imgEl.style.display = '';
+      if (cvs.parentNode) cvs.parentNode.removeChild(cvs);
     });
   }
-  return canvas;
+  return result;
 }
 
   try {
