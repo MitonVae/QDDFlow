@@ -166,6 +166,8 @@ async function _captureNode(target, scale) {
   srcNodes.forEach((src, i) => {
     const dst  = cloneNodes[i];
     if (!dst) return;
+    // img 标签跳过尺寸锁定，让 object-fit 继续控制比例
+    if (src.tagName === 'IMG') return;
     const rect = src.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     dst.style.width     = rect.width  + 'px';
