@@ -42,6 +42,7 @@ function buildEditorPageHTML() {
         <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
         <span id="autosave-label" class="tb-autosave-label"></span>
         <button class="tb-btn" id="shareLinkBtn" title="生成分享链接">🔗 分享</button>
+        <button class="tb-btn" id="copyTitleChainBtn" title="复制所有标题，用箭头连接">📋 标题链</button>
         <button class="tb-btn" id="exportPngBtn">🖼️ 导出PNG</button>
         <button class="tb-btn" id="exportPdfBtn">📄 导出PDF</button>
       </div>
@@ -86,8 +87,39 @@ function buildEditorPageHTML() {
   `;
 }
 
+// ===== 自动重排序号 =====
+// 检测标题是否以 "数字." 或 "数字、" 开头，如果是则按当前顺序重写序号
+const _RE_INDEX = /^(\d+)([\.、\-\s]+)(.*)/;
+
+function autoReindex() {
+  // 只有全部（或多数）环节都有数字前缀时才自动更新，避免破坏没有序号的项目
+  const hasPrefix = STATE.steps.filter(s => _RE_INDEX.test(s.name || ''));
+  if (hasPrefix.length < 2) return; // 少于 2 个有序号时不处理
+
+  let changed = false;
+  STATE.steps.forEach((step, i) => {
+    const m = (step.name || '').match(_RE_INDEX);
+    if (!m) return;
+    const sep      = m[2];      // 保留原来的分隔符（点/顿号等）
+    const rest     = m[3];      // 序号后面的内容
+    const newName  = `${i}${sep}${rest}`;
+    if (newName !== step.name) {
+      step.name = newName;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    log.info('autoReindex: 序号已更新');
+    const qdd = getCurrentQdd();
+    if (qdd) syncQddFromState(qdd);
+    // 不调用 saveAllQdds 以避免额外触发历史记录；由上层的 renderAll → saveAllQdds 保存
+  }
+}
+
 // ===== Render All =====
 function renderAll() {
+  autoReindex();
   renderStepsList();
   renderPreview();
 }
@@ -269,16 +301,15 @@ function openStepEditor(id) {
   const title = step ? `编辑环节：${step.name}` : '新增环节';
   const currentTaskType = step?.taskType || '';
   // Color: use colorOverride if set, else derive from taskType, else preset
-  const defaultColor = currentTaskType && TASK_TYPE_MAP[currentTaskType]
-    ? TASK_TYPE_MAP[currentTaskType].color
-    : (PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length]);
+  const defaultColor = findTaskType(currentTaskType)?.color
+    || PRESET_COLORS[STATE.steps.length % PRESET_COLORS.length];
   const selectedColor = step?.colorOverride || step?.color || defaultColor;
 
-  const taskTypeOptionsHtml = TASK_TYPES.map(t =>
+  const taskTypeOptionsHtml = getTaskTypes().map(t =>
     `<option value="${t.value}"${t.value === currentTaskType ? ' selected' : ''}>${t.label}</option>`
   ).join('');
 
-  const triggerOptionsHtml = ['', ...TRIGGER_OPTIONS].map(v =>
+  const triggerOptionsHtml = ['', ...getTriggerOptions()].map(v =>
     `<option value="${v}"${v === (step?.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
@@ -361,6 +392,12 @@ function openStepEditor(id) {
   `;
   // Set initial color picker hidden input
   modal.querySelector('#ef-color-picker').dataset.selected = selectedColor;
+
+  // 如果图片是 idb: 引用，异步解析后刷新预览区
+  if (step?.imageUrl && step.imageUrl.startsWith('idb:')) {
+    refreshEditorImagePreview(step.imageUrl);
+  }
+  log.info('openStepEditor:', id || '新建');
 }
 
 function renderCustomFieldRow(index, key='', value='') {
@@ -404,13 +441,11 @@ function getSelectedColor() {
 }
 
 function onTaskTypeChange(typeVal) {
-  // Auto-fill color from taskType, but allow manual override afterwards
-  if (typeVal && TASK_TYPE_MAP[typeVal]) {
-    const autoColor = TASK_TYPE_MAP[typeVal].color;
-    selectPresetColor(autoColor);
-    // Also update the color picker
+  const typeInfo = findTaskType(typeVal);
+  if (typeInfo?.color) {
+    selectPresetColor(typeInfo.color);
     const picker = document.getElementById('ef-color-picker');
-    if (picker) { picker.value = autoColor; picker.dataset.selected = autoColor; }
+    if (picker) { picker.value = typeInfo.color; picker.dataset.selected = typeInfo.color; }
   }
 }
 
@@ -431,7 +466,7 @@ function saveStep() {
   });
 
   const taskType = document.getElementById('ef-tasktype')?.value || '';
-  const autoColor = taskType && TASK_TYPE_MAP[taskType] ? TASK_TYPE_MAP[taskType].color : null;
+  const autoColor = findTaskType(taskType)?.color || null;
   const pickedColor = getSelectedColor();
   // colorOverride = manual if it differs from the auto color for this taskType
   const colorOverride = (autoColor && pickedColor !== autoColor) ? pickedColor : null;

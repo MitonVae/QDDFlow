@@ -1,6 +1,6 @@
 // ===== View: Home Page =====
 function showHomePage() {
-  // Save current QDD state before leaving editor
+  log.info('showHomePage: 离开编辑器，currentQddId=', STATE.currentQddId);
   if (STATE.currentQddId) {
     const qdd = getCurrentQdd();
     if (qdd) syncQddFromState(qdd);
@@ -77,22 +77,25 @@ function createNewQdd() {
   if (!title) return;
   const qdd = { id: genId(), title: title.trim() || '新建 QDD', steps: [] };
   STORE.qdds.push(qdd);
+  log.info('createNewQdd: id=', qdd.id, 'title=', qdd.title);
   saveAllQdds();
   openQdd(qdd.id);
 }
 
 function renameQdd(id) {
   const qdd = STORE.qdds.find(q => q.id === id);
-  if (!qdd) return;
+  if (!qdd) { log.warn('renameQdd: 找不到 id=', id); return; }
   const newTitle = prompt('重命名 QDD：', qdd.title);
   if (newTitle === null) return;
   qdd.title = newTitle.trim() || qdd.title;
+  log.info('renameQdd: id=', id, 'newTitle=', qdd.title);
   saveAllQdds();
   renderQddCards();
 }
 
 function deleteQdd(id) {
   if (!confirm('确认删除此 QDD？此操作不可恢复。')) return;
+  log.info('deleteQdd: id=', id);
   STORE.qdds = STORE.qdds.filter(q => q.id !== id);
   saveAllQdds();
   renderQddCards();
@@ -101,7 +104,8 @@ function deleteQdd(id) {
 
 function openQdd(id) {
   const qdd = STORE.qdds.find(q => q.id === id);
-  if (!qdd) return;
+  if (!qdd) { log.warn('openQdd: 找不到 id=', id); return; }
+  log.info('openQdd: id=', id, 'title=', qdd.title, 'steps=', (qdd.steps || []).length);
   STATE.currentQddId = id;
   STATE.view = 'editor';
   syncStateFromQdd(qdd);

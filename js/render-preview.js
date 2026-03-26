@@ -1,7 +1,8 @@
 // ===== Preview Render =====
 function renderPreview() {
   const $previewCanvas = document.getElementById('preview-canvas');
-  if (!$previewCanvas) return;
+  if (!$previewCanvas) { log.warn('renderPreview: #preview-canvas 不存在'); return; }
+  log.debug('renderPreview: layout=', STATE.layout, 'steps=', STATE.steps.length);
   if (STATE.steps.length === 0) {
     $previewCanvas.innerHTML = `
       <div class="preview-empty">
@@ -24,6 +25,7 @@ function renderPreview() {
 function renderTableLayout() {
   const $previewCanvas = document.getElementById('preview-canvas');
   if (!$previewCanvas) return;
+  log.debug('renderTableLayout: steps=', STATE.steps.length);
   const title = document.getElementById('questTitle')?.value || STATE.questTitle;
 
   const customKeys = [];
@@ -46,18 +48,7 @@ function renderTableLayout() {
     const customMap = {};
     (step.customFields || []).forEach(f => { customMap[f.key] = f.value; });
 
-    // ── Colored title header ──
-    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
-    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
-    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
-    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
-      <div class="qt-col-header-inner">
-        ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
-        ${badgeHtml}
-      </div>
-    </div>`;
-
-    // ── Image ──
+    // ── Image：图片放在标题上方；无图时显示虚线占位区（导出时隐藏）──
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
     const img = imgUrl
@@ -71,44 +62,55 @@ function renderTableLayout() {
                 onerror="this.style.display='none'">
            <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
          </div>`
-      : `<div class="qt-col-img qt-img-zone qt-col-img-empty" data-step-id="${sid}"
+      : `<div class="qt-col-img-empty" data-step-id="${sid}" data-export-hide="1"
              onclick="pickStepImage('${sid}')"
              ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
              ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
              ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="点击或拖入图片">
-           <span class="qt-img-empty-hint">📷 点击或拖入图片</span>
+             title="点击或拖入添加图片">
+           <span>📷 点击或拖入图片</span>
          </div>`;
 
-    // ── Fields: nested 2-col table [label | value] — skip empty rows ──
+    // ── Colored title header ──
+    const typeInfo = findTaskType(step.taskType);
+    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
+    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
+    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
+      <div class="qt-col-header-inner">
+        ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
+        ${badgeHtml}
+      </div>
+    </div>`;
+
+    // ── Fields: flex rows [label | value]，跳过空值 ──
     const fieldRows = fieldDefs.map(fd => {
       const val = fd.custom ? (customMap[fd.field] || '') : (step[fd.field] || '');
       if (fd.type === 'trigger-select') {
-        // Always show trigger row (allows clicking to set); if empty show placeholder
         const displayVal = val || '—';
-        return `<tr>
-          <td class="qt-fl">${esc(fd.label)}：</td>
-          <td class="qt-fv qt-fv-select" data-step-id="${step.id}" data-field="trigger"
-              onclick="toggleTriggerDropdown(event,'${step.id}')" title="点击选择触发方式">${esc(displayVal)}<span class="qt-select-arrow">▾</span></td>
-        </tr>`;
+        return `<div class="qt-field-row">
+          <div class="qt-fl">触发方式：</div>
+          <div class="qt-fv qt-fv-select" data-step-id="${step.id}" data-field="trigger"
+               onclick="toggleTriggerDropdown(event,'${step.id}')" title="点击选择触发方式">${esc(displayVal)}<span class="qt-select-arrow">▾</span></div>
+        </div>`;
       }
-      // Skip row entirely if value is empty
       if (!val) return '';
-      return `<tr>
-        <td class="qt-fl">${esc(fd.label)}：</td>
-        <td class="qt-fv" contenteditable="true"
+      return `<div class="qt-field-row">
+        <div class="qt-fl">${esc(fd.label)}：</div>
+        <div class="qt-fv" contenteditable="true"
           data-step-id="${step.id}" data-field="${fd.field}"
-          data-custom="${fd.custom ? '1' : '0'}">${esc(val)}</td>
-      </tr>`;
+          data-custom="${fd.custom ? '1' : '0'}">${esc(val)}</div>
+      </div>`;
     }).join('');
-    const fields = `<table class="qt-fields-table" cellspacing="0" cellpadding="0">${fieldRows}</table>`;
+    const fields = fieldRows
+      ? `<div class="qt-fields-block">${fieldRows}</div>`
+      : '';
 
     // ── Description ──
     const desc = `<div class="qt-col-desc" contenteditable="true"
       data-step-id="${step.id}" data-field="desc">${escWithBr(step.desc || '')}</div>`;
 
     return `<td class="qt-step-cell" valign="top">
-      <div class="qt-step-inner">${header}${img}${fields}${desc}</div>
+      <div class="qt-step-inner">${img}${header}${fields}${desc}</div>
     </td>`;
   }).join('');
 
@@ -334,7 +336,8 @@ function onTableCellBlur(e) {
   const val = el.innerText.trim();
 
   const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) return;
+  if (!step) { log.warn('onTableCellBlur: 找不到步骤 id=', stepId); return; }
+  log.debug('onTableCellBlur: stepId=', stepId, 'field=', field, 'val=', val.slice(0, 30));
 
   if (isCustom) {
     const cf = (step.customFields || []).find(f => f.key === field);
@@ -354,6 +357,7 @@ function onTableCellBlur(e) {
 let _propPanelStepId = null;
 
 function openStepPanel(stepId) {
+  log.info('openStepPanel: id=', stepId);
   // Toggle: clicking same header again closes the panel
   if (_propPanelStepId === stepId) {
     closeStepPanel();
@@ -391,13 +395,13 @@ function renderStepPanel() {
   // Ensure step has images array (backwards compat)
   if (!step.images) step.images = step.imageUrl ? [step.imageUrl] : [];
 
-  // Task type options
-  const taskTypeOpts = TASK_TYPES.map(t =>
+  // Task type options (dynamic: built-in + custom)
+  const taskTypeOpts = getTaskTypes().map(t =>
     `<option value="${esc(t.value)}"${t.value === (step.taskType||'') ? ' selected' : ''}>${esc(t.label)}</option>`
   ).join('');
 
-  // Trigger options
-  const triggerOpts = ['', ...TRIGGER_OPTIONS].map(v =>
+  // Trigger options (dynamic: built-in + custom)
+  const triggerOpts = ['', ...getTriggerOptions()].map(v =>
     `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
@@ -537,6 +541,7 @@ function deleteCustomField(stepId, fi) {
 }
 
 function deletePanelStep(stepId) {
+  log.info('deletePanelStep: id=', stepId);
   if (!confirm('确认删除此环节？')) return;
   STATE.steps = STATE.steps.filter(s => s.id !== stepId);
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
@@ -559,6 +564,7 @@ function getPrevStepDefaults() {
 }
 
 function addStep() {
+  log.info('addStep: 在', _propPanelStepId ? `步骤${_propPanelStepId}后` : '末尾', '插入');
   const defaults = getPrevStepDefaults();
   const newStep = {
     id: genId(), name: '新环节',
@@ -616,7 +622,7 @@ function toggleTriggerDropdown(event, stepId) {
   dropdown.className = 'type-dropdown-menu';
 
   // "Clear" option first
-  const allOptions = ['', ...TRIGGER_OPTIONS];
+  const allOptions = ['', ...getTriggerOptions()];
   allOptions.forEach(opt => {
     const item = document.createElement('div');
     item.className = 'type-dropdown-item' + ((step.trigger || '') === opt ? ' active' : '');
@@ -650,6 +656,7 @@ function toggleTriggerDropdown(event, stepId) {
 function renderTimelineLayout() {
   const $previewCanvas = document.getElementById('preview-canvas');
   if (!$previewCanvas) return;
+  log.debug('renderTimelineLayout: steps=', STATE.steps.length);
   const title = document.getElementById('questTitle')?.value || STATE.questTitle;
   const steps = STATE.steps;
 
@@ -665,7 +672,7 @@ function renderTimelineLayout() {
   const titleCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
     const colIdx = i * 2 + 1; // 1-based grid column
-    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
+    const typeInfo = findTaskType(step.taskType);
     const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
     const arrowCell = i < steps.length - 1
       ? `<div class="tl-arrow-cell" style="grid-column:${colIdx + 1};grid-row:1">→</div>`
@@ -683,30 +690,31 @@ function renderTimelineLayout() {
     `;
   }).join('');
 
-  // ── Row 2: Image ──
+  // ── Row 2: Image（无图时不渲染，grid 自动折叠该行）──
   const imgCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
-    const imgHtml = imgUrl
-      ? `<div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
-             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
-             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
-             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="拖入图片可替换；双击放大">
-           <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
-                ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
-           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
-         </div>`
-      : `<div class="qt-img-zone tl-image-placeholder" data-step-id="${sid}"
-             onclick="pickStepImage('${sid}')"
-             ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
-             ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
-             ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="点击或拖入图片">
-           <span>📷 点击或拖入图片</span>
-         </div>`;
-    return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">${imgHtml}</div>`;
+    if (!imgUrl) {
+      // 无图：渲染一个极小的占位触发区，不占视觉空间
+      return `<div class="tl-img-cell tl-img-add" data-export-hide="1" style="grid-column:${colIdx};grid-row:2"
+                   onclick="pickStepImage('${sid}')"
+                   ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+                   ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+                   ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+                   title="点击或拖入添加图片">＋</div>`;
+    }
+    return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">
+      <div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
+           ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
+           ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
+           ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
+           title="拖入图片可替换；双击放大">
+        <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
+             ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
+        <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
+      </div>
+    </div>`;
   }).join('');
 
   // ── Row 3: Meta (trigger / location / characters / custom) ──

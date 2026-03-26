@@ -125,119 +125,105 @@ function confirmImport() {
 // ===== Export PNG / PDF =====
 
 /**
- * 截图核心：离屏克隆渲染方案
- *
- * 策略：
- * 1. 把 target 深度克隆到一个绝对定位的离屏容器（position:fixed, left:-99999px）
- * 2. 克隆节点宽度固定为原始 scrollWidth，高度 auto，不受任何父容器 overflow/flex 影响
- * 3. 等待所有 img 加载完毕（src 已是真实 dataURL，不需要 CORS）
- * 4. 对克隆节点直接截图，原始 DOM 完全不动，边框/布局不受任何干扰
- * 5. 截完立即删除克隆节点
+ * 截图核心：离屏克隆渲染方案。
+ * 原理：把 target 深拷贝到视口外的独立容器，锁定每个节点的像素尺寸，
+ * 对克隆截图——原始 DOM 完全不动，边框/布局不受 html2canvas 重排影响。
  */
 async function _captureNode(target, scale) {
   const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
     .backgroundColor || '#ffffff';
 
-  // 1. 先确保原始节点的图片都加载完成
+  // 1. 等待原始节点中所有图片加载完毕
   await Promise.all(
     Array.from(target.querySelectorAll('img')).map(img =>
-      img.complete
-        ? Promise.resolve()
+      img.complete ? Promise.resolve()
         : new Promise(r => { img.onload = r; img.onerror = r; })
     )
   );
 
-  // 2. 获取原始节点的实际渲染尺寸
   const srcW = target.scrollWidth;
   const srcH = target.scrollHeight;
+  log.debug('_captureNode: srcW=', srcW, 'srcH=', srcH);
 
-  // 3. 创建离屏容器：fixed 定位移出视口，不影响页面布局
+  // 2. 建立离屏容器（fixed 定位，移出视口，不影响页面布局）
   const offscreen = document.createElement('div');
-  offscreen.style.cssText = [
-    'position:fixed',
-    'top:0',
-    'left:-99999px',
-    `width:${srcW}px`,
-    'height:auto',
-    'overflow:visible',
-    'z-index:-1',
-    'pointer-events:none',
-  ].join(';');
+  offscreen.style.cssText =
+    `position:fixed;top:0;left:-99999px;width:${srcW}px;height:auto;` +
+    'overflow:visible;z-index:-1;pointer-events:none;';
 
-  // 4. 深度克隆 target（含所有样式计算结果）
+  // 3. 深度克隆 target
   const clone = target.cloneNode(true);
-
-  // 强制克隆根节点尺寸与原始一致
   clone.style.width    = srcW + 'px';
   clone.style.height   = 'auto';
   clone.style.overflow = 'visible';
   clone.style.position = 'static';
   clone.style.transform = 'none';
 
-  // 5. 把原始节点所有元素的计算后样式（尤其是 width/height）复制到克隆
-  //    这样 html2canvas 渲染克隆时，每个单元格/行的尺寸都与原始完全一致
-  const srcNodes   = [target,  ...target.querySelectorAll('*')];
-  const cloneNodes = [clone,   ...clone.querySelectorAll('*')];
+  // 4. 把每个节点的真实像素尺寸写入克隆节点的 style
+  //    这样 html2canvas 渲染克隆时不会因 windowWidth 变化导致重排
+  const srcNodes   = [target, ...target.querySelectorAll('*')];
+  const cloneNodes = [clone,  ...clone.querySelectorAll('*')];
   srcNodes.forEach((src, i) => {
-    const dst = cloneNodes[i];
+    const dst  = cloneNodes[i];
     if (!dst) return;
-    const cs  = getComputedStyle(src);
+    // img 标签跳过尺寸锁定，让 object-fit 继续控制比例
+    if (src.tagName === 'IMG') return;
     const rect = src.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      dst.style.width     = rect.width  + 'px';
-      dst.style.height    = rect.height + 'px';
-      dst.style.minWidth  = rect.width  + 'px';
-      dst.style.minHeight = rect.height + 'px';
-      dst.style.maxWidth  = rect.width  + 'px';
-      dst.style.maxHeight = rect.height + 'px';
-      dst.style.boxSizing = 'border-box';
-      dst.style.flexShrink = '0';
-      dst.style.flexGrow   = '0';
-    }
-    // 保留 overflow:visible 让内容不被裁切（边框不会消失）
-    dst.style.overflow  = 'visible';
-    dst.style.overflowX = 'visible';
-    dst.style.overflowY = 'visible';
+    if (rect.width <= 0 || rect.height <= 0) return;
+    dst.style.width     = rect.width  + 'px';
+    dst.style.height    = rect.height + 'px';
+    dst.style.minWidth  = rect.width  + 'px';
+    dst.style.minHeight = rect.height + 'px';
+    dst.style.maxWidth  = rect.width  + 'px';
+    dst.style.maxHeight = rect.height + 'px';
+    dst.style.boxSizing  = 'border-box';
+    dst.style.flexShrink = '0';
+    dst.style.flexGrow   = '0';
+    dst.style.overflow   = 'visible';
+    dst.style.overflowX  = 'visible';
+    dst.style.overflowY  = 'visible';
+  });
+
+  // 隐藏导出时不需要的元素（如无图占位框）
+  clone.querySelectorAll('[data-export-hide]').forEach(el => {
+    el.style.display = 'none';
   });
 
   offscreen.appendChild(clone);
   document.body.appendChild(offscreen);
 
-  // 6. 等两帧让浏览器完成布局
+  // 5. 等两帧让浏览器完成布局，等克隆图片缓存命中
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
-
-  // 7. 等克隆节点内的图片加载完（克隆的 img src 与原始相同，通常已经缓存）
   await Promise.all(
     Array.from(clone.querySelectorAll('img')).map(img =>
-      img.complete
-        ? Promise.resolve()
+      img.complete ? Promise.resolve()
         : new Promise(r => { img.onload = r; img.onerror = r; })
     )
   );
 
   const cloneW = clone.scrollWidth;
   const cloneH = clone.scrollHeight;
+  log.debug('_captureNode: cloneW=', cloneW, 'cloneH=', cloneH);
 
   try {
     const canvas = await html2canvas(clone, {
       backgroundColor: bgColor,
       scale,
-      useCORS:      true,
-      allowTaint:   true,
-      x:            0,
-      y:            0,
-      width:        cloneW,
-      height:       cloneH,
+      useCORS:     true,
+      allowTaint:  true,
+      x:           0,
+      y:           0,
+      width:       cloneW,
+      height:      cloneH,
       windowWidth:  cloneW,
       windowHeight: cloneH,
-      scrollX:      0,
-      scrollY:      0,
-      logging:      false,
+      scrollX:     0,
+      scrollY:     0,
+      logging:     false,
     });
     return canvas;
   } finally {
-    // 8. 截图完成后立即删除离屏节点，不影响页面
     document.body.removeChild(offscreen);
   }
 }
@@ -247,16 +233,19 @@ async function exportPng() {
   const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
   const titleInput = document.getElementById('questTitle');
+  const filename = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.png`;
+  log.info('exportPng: 开始，target=', target.tagName, 'filename=', filename);
   try {
     const canvas = await _captureNode(target, 2);
+    log.info('exportPng: 截图完成，尺寸=', canvas.width, 'x', canvas.height);
     const link = document.createElement('a');
-    link.download = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.png`;
+    link.download = filename;
     link.href = canvas.toDataURL('image/png');
     link.click();
     showToast('✅ PNG 已导出');
   } catch (e) {
+    log.error('exportPng: 失败', e);
     showToast('❌ 导出失败：' + e.message);
-    console.error(e);
   }
 }
 
@@ -265,11 +254,14 @@ async function exportPdf() {
   const target = document.querySelector('#preview-canvas > *');
   if (!target) { showToast('❌ 没有内容可导出'); return; }
   const titleInput = document.getElementById('questTitle');
+  const filename = `QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`;
+  log.info('exportPdf: 开始，filename=', filename);
   try {
     const canvas = await _captureNode(target, 2);
+    log.info('exportPdf: 截图完成，尺寸=', canvas.width, 'x', canvas.height);
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const { jsPDF } = window.jspdf;
-    // canvas 尺寸（px） → pt（1pt = 1px @ 96dpi，jsPDF pt 单位）
+    if (!jsPDF) throw new Error('jsPDF 库未加载');
     const pdfW = canvas.width  * 0.75;
     const pdfH = canvas.height * 0.75;
     const pdf  = new jsPDF({
@@ -278,12 +270,50 @@ async function exportPdf() {
       format: [pdfW, pdfH],
     });
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-    pdf.save(`QDD_${(titleInput?.value || 'flow').replace(/\s+/g, '_')}.pdf`);
+    pdf.save(filename);
     showToast('✅ PDF 已导出');
   } catch (e) {
+    log.error('exportPdf: 失败', e);
     showToast('❌ 导出失败：' + e.message);
-    console.error(e);
   }
+}
+
+// ===== 标题链复制 =====
+/**
+ * 把所有环节名称用 ` → ` 连接成一行文字，复制到剪贴板。
+ * 示例：0.任务接取 → 1.武康大楼 → 2.对话门卫
+ */
+function copyTitleChain() {
+  if (!STATE.steps || STATE.steps.length === 0) {
+    showToast('⚠️ 没有环节可导出');
+    return;
+  }
+  const chain = STATE.steps.map(s => s.name || '未命名').join(' → ');
+  log.info('copyTitleChain:', chain.slice(0, 60));
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(chain)
+      .then(() => showToast('✅ 标题链已复制！'))
+      .catch(() => _fallbackCopyText(chain));
+  } else {
+    _fallbackCopyText(chain);
+  }
+}
+
+function _fallbackCopyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('✅ 标题链已复制！');
+  } catch(e) {
+    showToast('❌ 复制失败，请手动复制');
+    log.error('_fallbackCopyText:', e);
+  }
+  document.body.removeChild(ta);
 }
 
 // ===== Backup / Restore JSON（保留供 AI 导出下载功能调用）=====
