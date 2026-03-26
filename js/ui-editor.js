@@ -42,6 +42,7 @@ function buildEditorPageHTML() {
         <button class="tb-btn" id="addStepBtn">➕ 添加环节</button>
         <span id="autosave-label" class="tb-autosave-label"></span>
         <button class="tb-btn" id="shareLinkBtn" title="生成分享链接">🔗 分享</button>
+        <button class="tb-btn" id="copyTitleChainBtn" title="复制所有标题，用箭头连接">📋 标题链</button>
         <button class="tb-btn" id="exportPngBtn">🖼️ 导出PNG</button>
         <button class="tb-btn" id="exportPdfBtn">📄 导出PDF</button>
       </div>
@@ -86,8 +87,39 @@ function buildEditorPageHTML() {
   `;
 }
 
+// ===== 自动重排序号 =====
+// 检测标题是否以 "数字." 或 "数字、" 开头，如果是则按当前顺序重写序号
+const _RE_INDEX = /^(\d+)([\.、\-\s]+)(.*)/;
+
+function autoReindex() {
+  // 只有全部（或多数）环节都有数字前缀时才自动更新，避免破坏没有序号的项目
+  const hasPrefix = STATE.steps.filter(s => _RE_INDEX.test(s.name || ''));
+  if (hasPrefix.length < 2) return; // 少于 2 个有序号时不处理
+
+  let changed = false;
+  STATE.steps.forEach((step, i) => {
+    const m = (step.name || '').match(_RE_INDEX);
+    if (!m) return;
+    const sep      = m[2];      // 保留原来的分隔符（点/顿号等）
+    const rest     = m[3];      // 序号后面的内容
+    const newName  = `${i}${sep}${rest}`;
+    if (newName !== step.name) {
+      step.name = newName;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    log.info('autoReindex: 序号已更新');
+    const qdd = getCurrentQdd();
+    if (qdd) syncQddFromState(qdd);
+    // 不调用 saveAllQdds 以避免额外触发历史记录；由上层的 renderAll → saveAllQdds 保存
+  }
+}
+
 // ===== Render All =====
 function renderAll() {
+  autoReindex();
   renderStepsList();
   renderPreview();
 }

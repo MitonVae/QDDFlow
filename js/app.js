@@ -73,6 +73,9 @@ function bindEditorEvents() {
   const $aiExportBtn = document.getElementById('aiExportBtn');
   if ($aiExportBtn) $aiExportBtn.addEventListener('click', openAiExportPanel);
 
+  const $copyTitleChainBtn = document.getElementById('copyTitleChainBtn');
+  if ($copyTitleChainBtn) $copyTitleChainBtn.addEventListener('click', copyTitleChain);
+
   const $exportPngBtn = document.getElementById('exportPngBtn');
   if ($exportPngBtn) $exportPngBtn.addEventListener('click', exportPng);
 

@@ -271,5 +271,43 @@ async function exportPdf() {
   }
 }
 
+// ===== 标题链复制 =====
+/**
+ * 把所有环节名称用 ` → ` 连接成一行文字，复制到剪贴板。
+ * 示例：0.任务接取 → 1.武康大楼 → 2.对话门卫
+ */
+function copyTitleChain() {
+  if (!STATE.steps || STATE.steps.length === 0) {
+    showToast('⚠️ 没有环节可导出');
+    return;
+  }
+  const chain = STATE.steps.map(s => s.name || '未命名').join(' → ');
+  log.info('copyTitleChain:', chain.slice(0, 60));
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(chain)
+      .then(() => showToast('✅ 标题链已复制！'))
+      .catch(() => _fallbackCopyText(chain));
+  } else {
+    _fallbackCopyText(chain);
+  }
+}
+
+function _fallbackCopyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('✅ 标题链已复制！');
+  } catch(e) {
+    showToast('❌ 复制失败，请手动复制');
+    log.error('_fallbackCopyText:', e);
+  }
+  document.body.removeChild(ta);
+}
+
 // ===== Backup / Restore JSON（保留供 AI 导出下载功能调用）=====
 // exportCurrentQddAsJson 已移入 ai-import.js 的下载逻辑，此处留空
