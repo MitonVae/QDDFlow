@@ -125,15 +125,17 @@ function confirmImport() {
 // ===== Export PNG / PDF =====
 
 /**
- * 截图核心：离屏克隆渲染方案。
- * 原理：把 target 深拷贝到视口外的独立容器，锁定每个节点的像素尺寸，
- * 对克隆截图——原始 DOM 完全不动，边框/布局不受 html2canvas 重排影响。
+ * 截图核心。
+ *
+ * 难点：html2canvas 在 windowWidth != 真实视口宽时会重新布局，
+ * 导致边框错位；但如果用原始 DOM 截图，overflow 裁剪会漏掉内容。
+ * 解决：克隆 DOM + 锁定每个节点尺寸（保持布局），
+ * 但 <img> 不锁尺寸而是提前把图片内容画到 <canvas> 上（保持比例+白底留白），
+ * 截图完成后还原。
  */
 async function _captureNode(target, scale) {
-  const bgColor = getComputedStyle(document.getElementById('preview-area') || document.body)
-    .backgroundColor || '#ffffff';
 
-  // 1. 等待原始节点中所有图片加载完毕
+  // 1. 等所有图片加载
   await Promise.all(
     Array.from(target.querySelectorAll('img')).map(img =>
       img.complete ? Promise.resolve()
@@ -141,41 +143,67 @@ async function _captureNode(target, scale) {
     )
   );
 
-  const srcW = target.scrollWidth;
-  const srcH = target.scrollHeight;
-  log.debug('_captureNode: srcW=', srcW, 'srcH=', srcH);
+  // 2. 把原始 DOM 里每个 <img> 替换成按正确比例绘制的 <canvas>
+  //    记录替换关系，截完后还原
+  const imgSwaps = [];
+  target.querySelectorAll('img').forEach(img => {
+    const containerW = img.offsetWidth;
+    const containerH = img.offsetHeight;
+    if (!containerW || !containerH) return;
 
-  // 2. 建立离屏容器（fixed 定位，移出视口，不影响页面布局）
+    const natW = img.naturalWidth  || containerW;
+    const natH = img.naturalHeight || containerH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = containerW * scale;
+    canvas.height = containerH * scale;
+    const ctx = canvas.getContext('2d');
+
+    // 白色底
+    ctx.fillStyle = '#f5f5f5';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // contain：按比例缩放，居中
+    const ratio   = Math.min(canvas.width / natW, canvas.height / natH);
+    const drawW   = natW * ratio;
+    const drawH   = natH * ratio;
+    const drawX   = (canvas.width  - drawW) / 2;
+    const drawY   = (canvas.height - drawH) / 2;
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+    // 让 canvas 在页面里占同等空间
+    canvas.style.cssText = `width:${containerW}px;height:${containerH}px;display:block;`;
+
+    img.parentNode.insertBefore(canvas, img);
+    img.style.display = 'none';
+    imgSwaps.push({ img, canvas });
+  });
+
+  const srcW = target.scrollWidth;
+
+  // 3. 离屏克隆
   const offscreen = document.createElement('div');
   offscreen.style.cssText =
     `position:fixed;top:0;left:-99999px;width:${srcW}px;height:auto;` +
     'overflow:visible;z-index:-1;pointer-events:none;';
 
-  // 3. 深度克隆 target
   const clone = target.cloneNode(true);
-  clone.style.width    = srcW + 'px';
-  clone.style.height   = 'auto';
-  clone.style.overflow = 'visible';
-  clone.style.position = 'static';
-  clone.style.transform = 'none';
+  clone.style.cssText += `;width:${srcW}px;height:auto;overflow:visible;position:static;transform:none;`;
 
-  // 4. 把每个节点的真实像素尺寸写入克隆节点的 style
-  //    这样 html2canvas 渲染克隆时不会因 windowWidth 变化导致重排
+  // 4. 锁定克隆中每个节点的尺寸（<canvas> 已经是正确尺寸，直接锁；<img> 已隐藏不用管）
   const srcNodes   = [target, ...target.querySelectorAll('*')];
   const cloneNodes = [clone,  ...clone.querySelectorAll('*')];
   srcNodes.forEach((src, i) => {
-    const dst  = cloneNodes[i];
+    const dst = cloneNodes[i];
     if (!dst) return;
-    // img 标签跳过尺寸锁定，让 object-fit 继续控制比例
-    if (src.tagName === 'IMG') return;
     const rect = src.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    dst.style.width     = rect.width  + 'px';
-    dst.style.height    = rect.height + 'px';
-    dst.style.minWidth  = rect.width  + 'px';
-    dst.style.minHeight = rect.height + 'px';
-    dst.style.maxWidth  = rect.width  + 'px';
-    dst.style.maxHeight = rect.height + 'px';
+    dst.style.width      = rect.width  + 'px';
+    dst.style.height     = rect.height + 'px';
+    dst.style.minWidth   = rect.width  + 'px';
+    dst.style.minHeight  = rect.height + 'px';
+    dst.style.maxWidth   = rect.width  + 'px';
+    dst.style.maxHeight  = rect.height + 'px';
     dst.style.boxSizing  = 'border-box';
     dst.style.flexShrink = '0';
     dst.style.flexGrow   = '0';
@@ -184,27 +212,47 @@ async function _captureNode(target, scale) {
     dst.style.overflowY  = 'visible';
   });
 
-  // 隐藏导出时不需要的元素（如无图占位框）
-  clone.querySelectorAll('[data-export-hide]').forEach(el => {
-    el.style.display = 'none';
-  });
+  // 隐藏导出时不需要的元素
+  clone.querySelectorAll('[data-export-hide]').forEach(el => { el.style.display = 'none'; });
 
   offscreen.appendChild(clone);
   document.body.appendChild(offscreen);
 
-  // 5. 等两帧让浏览器完成布局，等克隆图片缓存命中
   await new Promise(r => requestAnimationFrame(r));
   await new Promise(r => requestAnimationFrame(r));
-  await Promise.all(
-    Array.from(clone.querySelectorAll('img')).map(img =>
-      img.complete ? Promise.resolve()
-        : new Promise(r => { img.onload = r; img.onerror = r; })
-    )
-  );
 
   const cloneW = clone.scrollWidth;
   const cloneH = clone.scrollHeight;
-  log.debug('_captureNode: cloneW=', cloneW, 'cloneH=', cloneH);
+
+  const bgColor = '#ffffff';
+
+  let canvas;
+  try {
+    canvas = await html2canvas(clone, {
+      backgroundColor: bgColor,
+      scale,
+      useCORS:      true,
+      allowTaint:   true,
+      x:            0,
+      y:            0,
+      width:        cloneW,
+      height:       cloneH,
+      windowWidth:  cloneW,
+      windowHeight: cloneH,
+      scrollX:      0,
+      scrollY:      0,
+      logging:      false,
+    });
+  } finally {
+    // 5. 还原：删离屏容器，恢复原始 img
+    document.body.removeChild(offscreen);
+    imgSwaps.forEach(({ img, canvas: c }) => {
+      img.style.display = '';
+      if (c.parentNode) c.parentNode.removeChild(c);
+    });
+  }
+  return canvas;
+}
 
   try {
     const canvas = await html2canvas(clone, {
