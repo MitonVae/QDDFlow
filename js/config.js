@@ -4,7 +4,10 @@ const TASK_TYPES = [
   { value: 'PUZ',   label: 'PUZ 玩法',   color: '#7c6af7' }, // 紫
   { value: 'BAT',   label: 'BAT 战斗',   color: '#06d6a0' }, // 绿
   { value: 'NAV',   label: 'NAV 跑图',   color: '#ffd166' }, // 黄
-  { value: 'STORY', label: '剧情',        color: '#8e9aaf' }, // 灰
+  { value: 'TL',    label: 'TL 剧情',    color: '#6b7280' }, // 深灰
+  { value: 'PHONE', label: '电话',        color: '#b0b8c4' }, // 浅灰
+  { value: 'SMS',   label: '短信',        color: '#b0b8c4' }, // 浅灰
+  { value: 'DIA',   label: 'DIA 对话',   color: '#b0b8c4' }, // 浅灰
 ];
 const TASK_TYPE_MAP = Object.fromEntries(TASK_TYPES.filter(t => t.value).map(t => [t.value, t]));
 
