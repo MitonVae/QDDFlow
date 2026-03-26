@@ -697,7 +697,7 @@ function renderTimelineLayout() {
     const sid = step.id;
     if (!imgUrl) {
       // 无图：渲染一个极小的占位触发区，不占视觉空间
-      return `<div class="tl-img-cell tl-img-add" style="grid-column:${colIdx};grid-row:2"
+      return `<div class="tl-img-cell tl-img-add" data-export-hide="1" style="grid-column:${colIdx};grid-row:2"
                    onclick="pickStepImage('${sid}')"
                    ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
                    ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"

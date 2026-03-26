@@ -182,6 +182,11 @@ async function _captureNode(target, scale) {
     dst.style.overflowY  = 'visible';
   });
 
+  // 隐藏导出时不需要的元素（如无图占位框）
+  clone.querySelectorAll('[data-export-hide]').forEach(el => {
+    el.style.display = 'none';
+  });
+
   offscreen.appendChild(clone);
   document.body.appendChild(offscreen);
 
