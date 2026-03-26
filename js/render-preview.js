@@ -1,13 +1,13 @@
-﻿// ===== Preview Render =====
+// ===== Preview Render =====
 function renderPreview() {
   const $previewCanvas = document.getElementById('preview-canvas');
-  if (!$previewCanvas) { log.warn('renderPreview: #preview-canvas 涓嶅瓨鍦?); return; }
+  if (!$previewCanvas) { log.warn('renderPreview: #preview-canvas 不存在'); return; }
   log.debug('renderPreview: layout=', STATE.layout, 'steps=', STATE.steps.length);
   if (STATE.steps.length === 0) {
     $previewCanvas.innerHTML = `
       <div class="preview-empty">
-        <div class="empty-icon">馃椇锔?/div>
-        <p>杩樻病鏈夌幆鑺傦紝鐐瑰嚮鍙充笂瑙掋€屸灂 娣诲姞鐜妭銆嶅紑濮嬭璁′綘鐨?QDD 娴佺▼鍥?/p>
+        <div class="empty-icon">🗺️</div>
+        <p>还没有环节，点击右上角「➕ 添加环节」开始设计你的 QDD 流程图</p>
       </div>`;
     return;
   }
@@ -16,6 +16,12 @@ function renderPreview() {
 }
 
 // ===== TABLE LAYOUT =====
+// Structure (matches reference image exactly):
+//   Outer table  : one <td> per step, side by side
+//   Inside each <td> : a nested 2-col table  [label | value] for each field
+//   Image        : spans full cell width at top
+//   Description  : spans full cell width at bottom
+//   No cross-column row alignment needed — each column is self-contained.
 function renderTableLayout() {
   const $previewCanvas = document.getElementById('preview-canvas');
   if (!$previewCanvas) return;
@@ -30,9 +36,9 @@ function renderTableLayout() {
   });
 
   const fieldDefs = [
-    { label: '瑙﹀彂鏂瑰紡', field: 'trigger', type: 'trigger-select' },
-    { label: '浣嶇疆',     field: 'location' },
-    { label: '鍑哄満浜虹墿', field: 'characters' },
+    { label: '触发方式', field: 'trigger', type: 'trigger-select' },
+    { label: '位置',     field: 'location' },
+    { label: '出场人物', field: 'characters' },
     ...customKeys.map(k => ({ label: k, field: k, custom: true })),
   ];
 
@@ -42,7 +48,7 @@ function renderTableLayout() {
     const customMap = {};
     (step.customFields || []).forEach(f => { customMap[f.key] = f.value; });
 
-    // 鈹€鈹€ Image锛氬浘鐗囨斁鍦ㄦ爣棰樹笂鏂癸紱鏃犲浘鏃舵樉绀鸿櫄绾垮崰浣嶅尯锛堝鍑烘椂闅愯棌锛夆攢鈹€
+    // ── Image：图片放在标题上方；无图时显示虚线占位区（导出时隐藏）──
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
     const img = imgUrl
@@ -50,46 +56,46 @@ function renderTableLayout() {
              ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
              ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
              ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="鎷栧叆鍥剧墖鍙浛鎹紱鍙屽嚮鏀惧ぇ">
+             title="拖入图片可替换；双击放大">
            <img src="${esc(imgUrl)}" loading="lazy"
                 ondblclick="openImagePreview('${esc(imgUrl)}')"
                 onerror="this.style.display='none'">
-           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="鍒犻櫎鍥剧墖">脳</button>
+           <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
          </div>`
       : `<div class="qt-col-img-empty" data-step-id="${sid}" data-export-hide="1"
              onclick="pickStepImage('${sid}')"
              ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
              ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
              ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-             title="鐐瑰嚮鎴栨嫋鍏ユ坊鍔犲浘鐗?>
-           <span>馃摲 鐐瑰嚮鎴栨嫋鍏ュ浘鐗?/span>
+             title="点击或拖入添加图片">
+           <span>📷 点击或拖入图片</span>
          </div>`;
 
-    // 鈹€鈹€ Colored title header 鈹€鈹€
+    // ── Colored title header ──
     const typeInfo = findTaskType(step.taskType);
-    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="鐐瑰嚮鍒囨崲浠诲姟绫诲瀷">${typeInfo ? typeInfo.label.split(' ')[0] : '锛嬬被鍨?}</span>`;
-    const indexTag = step.index ? `<span class="qt-col-index" title="鐜妭缂栧彿 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
-    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="鐐瑰嚮鎵撳紑灞炴€ч潰鏉?>
+    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
+    const indexTag = step.index ? `<span class="qt-col-index" title="环节编号 #${esc(step.index)}">#${esc(step.index)}</span>` : '';
+    const header = `<div class="qt-col-header" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板">
       <div class="qt-col-header-inner">
         ${indexTag}<span class="qt-editable" contenteditable="true" data-step-id="${step.id}" data-field="name" onclick="event.stopPropagation()">${esc(step.name)}</span>
         ${badgeHtml}
       </div>
     </div>`;
 
-    // 鈹€鈹€ Fields: flex rows [label | value]锛岃烦杩囩┖鍊?鈹€鈹€
+    // ── Fields: flex rows [label | value]，跳过空值 ──
     const fieldRows = fieldDefs.map(fd => {
       const val = fd.custom ? (customMap[fd.field] || '') : (step[fd.field] || '');
       if (fd.type === 'trigger-select') {
-        const displayVal = val || '鈥?;
+        const displayVal = val || '—';
         return `<div class="qt-field-row">
-          <div class="qt-fl">瑙﹀彂鏂瑰紡锛?/div>
+          <div class="qt-fl">触发方式：</div>
           <div class="qt-fv qt-fv-select" data-step-id="${step.id}" data-field="trigger"
-               onclick="toggleTriggerDropdown(event,'${step.id}')" title="鐐瑰嚮閫夋嫨瑙﹀彂鏂瑰紡">${esc(displayVal)}<span class="qt-select-arrow">鈻?/span></div>
+               onclick="toggleTriggerDropdown(event,'${step.id}')" title="点击选择触发方式">${esc(displayVal)}<span class="qt-select-arrow">▾</span></div>
         </div>`;
       }
       if (!val) return '';
       return `<div class="qt-field-row">
-        <div class="qt-fl">${esc(fd.label)}锛?/div>
+        <div class="qt-fl">${esc(fd.label)}：</div>
         <div class="qt-fv" contenteditable="true"
           data-step-id="${step.id}" data-field="${fd.field}"
           data-custom="${fd.custom ? '1' : '0'}">${esc(val)}</div>
@@ -99,7 +105,7 @@ function renderTableLayout() {
       ? `<div class="qt-fields-block">${fieldRows}</div>`
       : '';
 
-    // 鈹€鈹€ Description 鈹€鈹€
+    // ── Description ──
     const desc = `<div class="qt-col-desc" contenteditable="true"
       data-step-id="${step.id}" data-field="desc">${escWithBr(step.desc || '')}</div>`;
 
@@ -112,7 +118,7 @@ function renderTableLayout() {
     <div class="table-wrap">
       <div class="table-title-bar">
         ${esc(title)}
-        <button class="table-copy-btn" onclick="copyTableToClipboard()" title="澶嶅埗鏁村紶琛紝鍙洿鎺ョ矘璐村埌 Excel / 椋炰功琛ㄦ牸">馃搵 澶嶅埗鍒拌〃鏍?/button>
+        <button class="table-copy-btn" onclick="copyTableToClipboard()" title="复制整张表，可直接粘贴到 Excel / 飞书表格">📋 复制到表格</button>
       </div>
       <div class="qt-scroll">
         <table class="qt-table" cellspacing="0" cellpadding="0">
@@ -131,27 +137,28 @@ function renderTableLayout() {
     });
   });
 
-  // 缁戝畾鍥剧墖鍖轰氦浜掞紙鎷栧叆 / 鐐瑰嚮閫夋嫨 / 鍒犻櫎锛?  bindPreviewImageZones($previewCanvas);
+  // 绑定图片区交互（拖入 / 点击选择 / 删除）
+  bindPreviewImageZones($previewCanvas);
 }
 
 // ===== Copy Table to Clipboard =====
 // Flat multi-row HTML table (no nesting). Each step = 2 cols (label|value).
 // Field rows: only show a row if at least ONE step has a value for that field.
-// For steps without a value in that row 鈫?show empty cells (no label, no dash).
+// For steps without a value in that row → show empty cells (no label, no dash).
 function copyTableToClipboard() {
   const steps = STATE.steps;
-  if (!steps.length) { showToast('鈿狅笍 娌℃湁鐜妭鍙鍒?); return; }
+  if (!steps.length) { showToast('⚠️ 没有环节可复制'); return; }
 
   // Helper: escape HTML
   const h = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  // Helper: hex 鈫?rgba
+  // Helper: hex → rgba
   const hexToRgba = (hex, alpha) => {
     const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return `rgba(${r},${g},${b},${alpha})`;
   };
 
   const B = `border:1px solid #bbb;`;
-  const fnt = `font-family:寰蒋闆呴粦,Arial,sans-serif;font-size:11px;`;
+  const fnt = `font-family:微软雅黑,Arial,sans-serif;font-size:11px;`;
   // cell style builders
   const cs  = extra => `${B}${fnt}${extra}`;
   const lbl = color  => cs(`padding:3px 5px;background:#f0f0f0;color:#555;font-weight:600;white-space:nowrap;vertical-align:top;`);
@@ -163,9 +170,9 @@ function copyTableToClipboard() {
   steps.forEach(s => (s.customFields||[]).forEach(f => { if(f.key && !customKeys.includes(f.key)) customKeys.push(f.key); }));
 
   const allFields = [
-    { key: '__trigger',    label: '瑙﹀彂鏂瑰紡', get: s => s.trigger || '' },
-    { key: '__location',   label: '浣嶇疆',     get: s => s.location || '' },
-    { key: '__characters', label: '鍑哄満浜虹墿', get: s => s.characters || '' },
+    { key: '__trigger',    label: '触发方式', get: s => s.trigger || '' },
+    { key: '__location',   label: '位置',     get: s => s.location || '' },
+    { key: '__characters', label: '出场人物', get: s => s.characters || '' },
     ...customKeys.map(k => ({
       key: k, label: k,
       get: s => { const cf = (s.customFields||[]).find(f=>f.key===k); return cf ? (cf.value||'') : ''; }
@@ -175,28 +182,28 @@ function copyTableToClipboard() {
   // Only keep field rows where at least one step has a non-empty value
   const activeFields = allFields.filter(fd => steps.some(s => fd.get(s).trim() !== ''));
 
-  // 鈹€鈹€ Row 1: image row 鈥?each step spans 2 cols 鈹€鈹€
+  // ── Row 1: image row — each step spans 2 cols ──
   const imgCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
     const imgs = step.images && step.images.length > 0 ? step.images : (step.imageUrl ? [step.imageUrl] : []);
     const resolvedImgs = imgs.map(u => getResolvedImageUrl(u)).filter(Boolean);
     const inner = resolvedImgs.length > 0
       ? resolvedImgs.map(url => `<img src="${h(url)}" style="max-width:160px;max-height:110px;display:inline-block;margin:2px;">`).join('')
-      : `<span style="${fnt}color:#aaa;">馃柤 鍦ㄥ睘鎬ч潰鏉挎坊鍔犻厤鍥?/span>`;
+      : `<span style="${fnt}color:#aaa;">🖼 在属性面板添加配图</span>`;
     return `<td colspan="2" style="${B}${fnt}padding:5px;text-align:center;vertical-align:middle;background:${hexToRgba(color,0.07)};height:80px;">${inner}</td>`;
   }).join('');
 
-  // 鈹€鈹€ Row 2: title row 鈥?each step spans 2 cols 鈹€鈹€
+  // ── Row 2: title row — each step spans 2 cols ──
   const titleCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
-    const typeInfo = findTaskType(step.taskType);
+    const typeInfo = step.taskType && TASK_TYPE_MAP[step.taskType] ? TASK_TYPE_MAP[step.taskType] : null;
     const badge = typeInfo
       ? `<br><span style="display:inline-block;margin-top:3px;padding:1px 9px;border-radius:9px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.32);color:#fff;">${h(typeInfo.value)}</span>`
       : '';
-    return `<td colspan="2" style="${B}${fnt}padding:7px 6px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);line-height:1.4;">${h(step.name||'鏈懡鍚嶇幆鑺?)}${badge}</td>`;
+    return `<td colspan="2" style="${B}${fnt}padding:7px 6px;background:${color};color:#fff;font-weight:700;font-size:13px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.3);line-height:1.4;">${h(step.name||'未命名环节')}${badge}</td>`;
   }).join('');
 
-  // 鈹€鈹€ Field rows with rowspan merging 鈹€鈹€
+  // ── Field rows with rowspan merging ──
   // For each step (column), merge consecutive empty field rows into one spanning cell.
   // Build a 2D grid: grid[rowIdx][stepIdx] = { html, skip }
   //   html  = the <td> pair string to emit
@@ -218,10 +225,10 @@ function copyTableToClipboard() {
     let ri = 0;
     while (ri < nRows) {
       if (!isEmpty[ri]) {
-        // Has value 鈥?normal label+value pair
+        // Has value — normal label+value pair
         const fd = activeFields[ri];
         const v  = fd.get(step).trim();
-        grid[ri][si].html = `<td style="${lbl(color)}">${h(fd.label)}锛?/td><td style="${val(color)}">${h(v)}</td>`;
+        grid[ri][si].html = `<td style="${lbl(color)}">${h(fd.label)}：</td><td style="${val(color)}">${h(v)}</td>`;
         ri++;
       } else {
         // Find the run of consecutive empty rows for this step
@@ -250,7 +257,7 @@ function copyTableToClipboard() {
     return `<tr>${cells}</tr>`;
   }).join('');
 
-  // 鈹€鈹€ Description row 鈥?each step spans 2 cols 鈹€鈹€
+  // ── Description row — each step spans 2 cols ──
   const hasDesc = steps.some(s => (s.desc||'').trim());
   const descRowHtml = hasDesc ? `<tr>${steps.map((step,i) => {
     const color = getStepColor(step, i);
@@ -267,11 +274,11 @@ function copyTableToClipboard() {
 
   // Write both HTML and plain-text to clipboard
   const plainText = steps.map(s => {
-    const lines = [s.name || '鏈懡鍚嶇幆鑺?];
-    if (s.trigger)    lines.push(`瑙﹀彂鏂瑰紡锛?{s.trigger}`);
-    if (s.location)   lines.push(`浣嶇疆锛?{s.location}`);
-    if (s.characters) lines.push(`鍑哄満浜虹墿锛?{s.characters}`);
-    (s.customFields||[]).forEach(f => { if(f.key) lines.push(`${f.key}锛?{f.value||''}`); });
+    const lines = [s.name || '未命名环节'];
+    if (s.trigger)    lines.push(`触发方式：${s.trigger}`);
+    if (s.location)   lines.push(`位置：${s.location}`);
+    if (s.characters) lines.push(`出场人物：${s.characters}`);
+    (s.customFields||[]).forEach(f => { if(f.key) lines.push(`${f.key}：${f.value||''}`); });
     if (s.desc) lines.push(s.desc);
     return lines.join('\n');
   }).join('\n\n');
@@ -282,7 +289,7 @@ function copyTableToClipboard() {
       'text/plain': new Blob([plainText],  { type: 'text/plain' }),
     });
     navigator.clipboard.write([clipItem]).then(() => {
-      showToast('鉁?宸插鍒讹紒鍙洿鎺ョ矘璐村埌椋炰功/Excel 琛ㄦ牸锛堜繚鐣欐牸寮忥級');
+      showToast('✅ 已复制！可直接粘贴到飞书/Excel 表格（保留格式）');
     }).catch(err => {
       console.warn('ClipboardItem write failed, fallback:', err);
       _copyHtmlFallback(tableHtml, plainText);
@@ -306,7 +313,7 @@ function _copyHtmlFallback(html, plain) {
   sel.addRange(range);
   try {
     document.execCommand('copy');
-    showToast('鉁?宸插鍒讹紒鍙洿鎺ョ矘璐村埌椋炰功/Excel 琛ㄦ牸锛堜繚鐣欐牸寮忥級');
+    showToast('✅ 已复制！可直接粘贴到飞书/Excel 表格（保留格式）');
   } catch(e) {
     // Last resort: plain text
     const ta = document.createElement('textarea');
@@ -316,7 +323,7 @@ function _copyHtmlFallback(html, plain) {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast('鉁?宸插鍒讹紙绾枃鏈牸寮忥級');
+    showToast('✅ 已复制（纯文本格式）');
   }
   document.body.removeChild(div);
 }
@@ -329,7 +336,7 @@ function onTableCellBlur(e) {
   const val = el.innerText.trim();
 
   const step = STATE.steps.find(s => s.id === stepId);
-  if (!step) { log.warn('onTableCellBlur: 鎵句笉鍒版楠?id=', stepId); return; }
+  if (!step) { log.warn('onTableCellBlur: 找不到步骤 id=', stepId); return; }
   log.debug('onTableCellBlur: stepId=', stepId, 'field=', field, 'val=', val.slice(0, 30));
 
   if (isCustom) {
@@ -341,7 +348,7 @@ function onTableCellBlur(e) {
   // Update quest title display if name changed
   if (field === 'name') renderStepsList();
 
-  // 鈹€鈹€ Persist: sync back to STORE and save to localStorage 鈹€鈹€
+  // ── Persist: sync back to STORE and save to localStorage ──
   const qdd = getCurrentQdd();
   if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
 }
@@ -350,11 +357,12 @@ function onTableCellBlur(e) {
 let _propPanelStepId = null;
 
 function openStepPanel(stepId) {
+  log.info('openStepPanel: id=', stepId);
+  // Toggle: clicking same header again closes the panel
   if (_propPanelStepId === stepId) {
     closeStepPanel();
     return;
   }
-  log.info('openStepPanel: id=', stepId);
   _propPanelStepId = stepId;
   STATE.activeStepId = stepId;
   renderStepsList(); // highlight active in left list
@@ -382,98 +390,99 @@ function renderStepPanel() {
   const step = STATE.steps.find(s => s.id === _propPanelStepId);
   if (!step) { closeStepPanel(); return; }
 
-  if (titleEl) titleEl.textContent = step.name || '鏈懡鍚嶇幆鑺?;
+  if (titleEl) titleEl.textContent = step.name || '未命名环节';
 
   // Ensure step has images array (backwards compat)
   if (!step.images) step.images = step.imageUrl ? [step.imageUrl] : [];
 
-  // Task type options锛堝唴缃?+ 鑷畾涔夛級
+  // Task type options (dynamic: built-in + custom)
   const taskTypeOpts = getTaskTypes().map(t =>
     `<option value="${esc(t.value)}"${t.value === (step.taskType||'') ? ' selected' : ''}>${esc(t.label)}</option>`
   ).join('');
 
-  // Trigger options锛堝唴缃?+ 鑷畾涔夛級
+  // Trigger options (dynamic: built-in + custom)
   const triggerOpts = ['', ...getTriggerOptions()].map(v =>
-    `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '鈥?}</option>`
+    `<option value="${esc(v)}"${v === (step.trigger||'') ? ' selected' : ''}>${v || '—'}</option>`
   ).join('');
 
   // Custom fields rows
   const cfRows = (step.customFields || []).map((f, fi) => `
     <div class="pp-cf-row" data-fi="${fi}">
-      <input class="pp-cf-key" type="text" placeholder="鍙傛暟鍚? value="${esc(f.key)}"
+      <input class="pp-cf-key" type="text" placeholder="参数名" value="${esc(f.key)}"
         onchange="updateCustomFieldKey('${step.id}',${fi},this.value)">
-      <input class="pp-cf-val" type="text" placeholder="鍙傛暟鍊? value="${esc(f.value)}"
+      <input class="pp-cf-val" type="text" placeholder="参数值" value="${esc(f.value)}"
         onchange="updateCustomFieldVal('${step.id}',${fi},this.value)">
-      <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="鍒犻櫎姝ゅ瓧娈?>脳</button>
+      <button class="pp-cf-del" onclick="deleteCustomField('${step.id}',${fi})" title="删除此字段">×</button>
     </div>`).join('');
 
-  // 鍥剧墖鍖猴細鏈夊浘鍒欏叏瀹藉睍绀?鍒犻櫎锛屾棤鍥惧垯鏄剧ず閫夋嫨鎸夐挳
+  // 图片区：有图则全宽展示+删除，无图则显示选择按钮
   const _rawImgKey = step.imageUrl || (Array.isArray(step.images) && step.images[0]) || '';
   const imgUrl = getResolvedImageUrl(_rawImgKey);
   const imgSection = imgUrl
     ? `<div class="pp-img-single">
-         <img src="${esc(imgUrl)}" alt="閰嶅浘" onclick="openImagePreview('${esc(imgUrl)}')" title="鐐瑰嚮鏀惧ぇ">
-         <button class="pp-img-del" onclick="deleteStepImage('${step.id}')">脳 鍒犻櫎</button>
+         <img src="${esc(imgUrl)}" alt="配图" onclick="openImagePreview('${esc(imgUrl)}')" title="点击放大">
+         <button class="pp-img-del" onclick="deleteStepImage('${step.id}')">× 删除</button>
        </div>`
-    : `<button class="pp-img-add-btn" onclick="pickStepImage('${step.id}')">馃摲 閫夋嫨鍥剧墖</button>`;
+    : `<button class="pp-img-add-btn" onclick="pickStepImage('${step.id}')">📷 选择图片</button>`;
 
   body.innerHTML = `
     <div class="pp-section">
-      <label class="pp-label">鐜妭鍚嶇О</label>
+      <label class="pp-label">环节名称</label>
       <input class="pp-input" type="text" id="pp-name" value="${esc(step.name||'')}"
         oninput="savePanelField('${step.id}','name',this.value)">
     </div>
 
     <div class="pp-section pp-row2">
       <div>
-        <label class="pp-label">浠诲姟绫诲瀷</label>
+        <label class="pp-label">任务类型</label>
         <select class="pp-select" id="pp-tasktype"
           onchange="savePanelTaskType('${step.id}',this.value)">${taskTypeOpts}</select>
       </div>
       <div>
-        <label class="pp-label">瑙﹀彂鏂瑰紡</label>
+        <label class="pp-label">触发方式</label>
         <select class="pp-select" id="pp-trigger"
           onchange="savePanelField('${step.id}','trigger',this.value)">${triggerOpts}</select>
       </div>
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">浣嶇疆</label>
-      <input class="pp-input" type="text" id="pp-location" placeholder="濡傦細姝﹀悍澶фゼ路澶у巺"
+      <label class="pp-label">位置</label>
+      <input class="pp-input" type="text" id="pp-location" placeholder="如：武康大楼·大厅"
         value="${esc(step.location||'')}" oninput="savePanelField('${step.id}','location',this.value)">
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鍑哄満浜虹墿</label>
-      <input class="pp-input" type="text" id="pp-characters" placeholder="濡傦細鏌氭煚, 绋嬮啋"
+      <label class="pp-label">出场人物</label>
+      <input class="pp-input" type="text" id="pp-characters" placeholder="如：柚柠, 程醒"
         value="${esc(step.characters||'')}" oninput="savePanelField('${step.id}','characters',this.value)">
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鎻忚堪</label>
+      <label class="pp-label">描述</label>
       <textarea class="pp-textarea" id="pp-desc"
         oninput="savePanelField('${step.id}','desc',this.value)">${esc(step.desc||'')}</textarea>
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">閰嶅浘</label>
+      <label class="pp-label">配图</label>
       ${imgSection}
     </div>
 
     <div class="pp-section">
-      <label class="pp-label">鑷畾涔夊瓧娈?        <button class="pp-cf-add-btn" onclick="addCustomField('${step.id}')">锛?娣诲姞瀛楁</button>
+      <label class="pp-label">自定义字段
+        <button class="pp-cf-add-btn" onclick="addCustomField('${step.id}')">＋ 添加字段</button>
       </label>
       <div class="pp-cf-list" id="pp-cf-list">${cfRows}</div>
     </div>
 
     <div class="pp-section pp-danger-zone">
-      <button class="pp-del-step-btn" onclick="deletePanelStep('${step.id}')">馃棏 鍒犻櫎姝ょ幆鑺?/button>
-      <button class="pp-add-step-btn" onclick="addStep()">锛?鍦ㄦ鍚庢柊澧炵幆鑺?/button>
+      <button class="pp-del-step-btn" onclick="deletePanelStep('${step.id}')">🗑 删除此环节</button>
+      <button class="pp-add-step-btn" onclick="addStep()">＋ 在此后新增环节</button>
     </div>
   `;
 }
 
-// 鈹€鈹€ Panel field savers 鈹€鈹€
+// ── Panel field savers ──
 function savePanelField(stepId, field, val) {
   const step = STATE.steps.find(s => s.id === stepId);
   if (!step) return;
@@ -482,7 +491,7 @@ function savePanelField(stepId, field, val) {
   // Live-refresh preview without closing panel
   if (field === 'name') {
     const titleEl = document.getElementById('prop-panel-title');
-    if (titleEl) titleEl.textContent = val || '鏈懡鍚嶇幆鑺?;
+    if (titleEl) titleEl.textContent = val || '未命名环节';
     renderStepsList();
   }
   // Partial re-render: just re-render the preview (fast)
@@ -532,14 +541,13 @@ function deleteCustomField(stepId, fi) {
 }
 
 function deletePanelStep(stepId) {
-  if (!confirm('纭鍒犻櫎姝ょ幆鑺傦紵')) return;
   log.info('deletePanelStep: id=', stepId);
+  if (!confirm('确认删除此环节？')) return;
   STATE.steps = STATE.steps.filter(s => s.id !== stepId);
-  const qdd = getCurrentQdd();
-  if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
+  const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   closeStepPanel();
   renderAll();
-  showToast('鐜妭宸插垹闄?);
+  showToast('环节已删除');
 }
 
 function getPrevStepDefaults() {
@@ -556,10 +564,10 @@ function getPrevStepDefaults() {
 }
 
 function addStep() {
-  log.info('addStep: 鍦?, _propPanelStepId ? `姝ラ${_propPanelStepId}鍚巂 : '鏈熬', '鎻掑叆');
+  log.info('addStep: 在', _propPanelStepId ? `步骤${_propPanelStepId}后` : '末尾', '插入');
   const defaults = getPrevStepDefaults();
   const newStep = {
-    id: genId(), name: '鏂扮幆鑺?,
+    id: genId(), name: '新环节',
     trigger:    defaults.trigger,
     location:   defaults.location,
     characters: defaults.characters,
@@ -583,7 +591,7 @@ function addMultipleSteps() {
   const defaults = getPrevStepDefaults();
   for (let i = 0; i < count; i++) {
     STATE.steps.push({
-      id: genId(), name: `鏂扮幆鑺俙,
+      id: genId(), name: `新环节`,
       trigger:    defaults.trigger,
       location:   defaults.location,
       characters: defaults.characters,
@@ -593,7 +601,7 @@ function addMultipleSteps() {
   }
   const qdd = getCurrentQdd(); if (qdd) { syncQddFromState(qdd); saveAllQdds(); }
   renderAll();
-  showToast(`宸叉坊鍔?${count} 涓幆鑺俙);
+  showToast(`已添加 ${count} 个环节`);
 }
 
 // ===== Trigger Inline Dropdown =====
@@ -601,7 +609,9 @@ let _triggerDropdownCleanup = null;
 
 function toggleTriggerDropdown(event, stepId) {
   event.stopPropagation();
+  // Close type dropdown too
   closeTypeDropdown();
+  // Close existing trigger dropdown
   if (_triggerDropdownCleanup) { _triggerDropdownCleanup(); return; }
 
   const cell = event.currentTarget;
@@ -611,56 +621,27 @@ function toggleTriggerDropdown(event, stepId) {
   const dropdown = document.createElement('div');
   dropdown.className = 'type-dropdown-menu';
 
-  // 绌洪€夐」锛堟竻闄わ級+ 鎵€鏈夎Е鍙戞柟寮忥紙鍐呯疆 + 鑷畾涔夛級
+  // "Clear" option first
   const allOptions = ['', ...getTriggerOptions()];
   allOptions.forEach(opt => {
     const item = document.createElement('div');
     item.className = 'type-dropdown-item' + ((step.trigger || '') === opt ? ' active' : '');
-    item.textContent = opt || '鈥旓紙娓呴櫎锛?;
+    item.textContent = opt || '—（清除）';
     item.addEventListener('click', e => {
       e.stopPropagation();
       step.trigger = opt;
       saveAllQdds();
       if (_triggerDropdownCleanup) _triggerDropdownCleanup();
-      cell.childNodes[0].textContent = opt || '鈥?;
+      // Update cell text in-place without full re-render
+      cell.childNodes[0].textContent = opt || '—';
     });
     dropdown.appendChild(item);
   });
 
-  // 鍒嗛殧绾?  const sep = document.createElement('div');
-  sep.className = 'type-dropdown-sep';
-  dropdown.appendChild(sep);
-
-  // 銆岋紜 娣诲姞鑷畾涔夎Е鍙戞柟寮忋€?  const addItem = document.createElement('div');
-  addItem.className = 'type-dropdown-item type-dropdown-add';
-  addItem.textContent = '锛?娣诲姞鑷畾涔夎Е鍙戞柟寮忊€?;
-  addItem.addEventListener('click', e => {
-    e.stopPropagation();
-    if (_triggerDropdownCleanup) _triggerDropdownCleanup();
-    promptAddCustomTrigger(newTrigger => {
-      // 鐩存帴閫変腑鏂板鐨勮Е鍙戞柟寮?      step.trigger = newTrigger;
-      saveAllQdds();
-      cell.childNodes[0].textContent = newTrigger;
-    });
-  });
-  dropdown.appendChild(addItem);
-
-  // 銆岎煑?绠＄悊鑷畾涔夎Е鍙戞柟寮忋€?  if (STORE.customTriggers.length > 0) {
-    const manageItem = document.createElement('div');
-    manageItem.className = 'type-dropdown-item type-dropdown-manage';
-    manageItem.textContent = '馃棏 绠＄悊鑷畾涔夎Е鍙戞柟寮忊€?;
-    manageItem.addEventListener('click', e => {
-      e.stopPropagation();
-      if (_triggerDropdownCleanup) _triggerDropdownCleanup();
-      openManageCustomTriggers();
-    });
-    dropdown.appendChild(manageItem);
-  }
-
   document.body.appendChild(dropdown);
   const rect = cell.getBoundingClientRect();
   dropdown.style.top  = (rect.bottom + 2) + 'px';
-  dropdown.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+  dropdown.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
 
   const onOutside = () => { if (_triggerDropdownCleanup) _triggerDropdownCleanup(); };
   setTimeout(() => document.addEventListener('click', onOutside, { once: true }), 0);
@@ -687,18 +668,18 @@ function renderTimelineLayout() {
     i < steps.length - 1 ? `${colW} 36px` : colW
   ).join(' ');
 
-  // 鈹€鈹€ Row 1: Title boxes + arrows 鈹€鈹€
+  // ── Row 1: Title boxes + arrows ──
   const titleCells = steps.map((step, i) => {
     const color = getStepColor(step, i);
     const colIdx = i * 2 + 1; // 1-based grid column
     const typeInfo = findTaskType(step.taskType);
-    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="鐐瑰嚮鍒囨崲浠诲姟绫诲瀷">${typeInfo ? typeInfo.label.split(' ')[0] : '锛嬬被鍨?}</span>`;
+    const badgeHtml = `<span class="qt-type-badge" data-step-id="${step.id}" onclick="toggleTypeDropdown(event,'${step.id}')" title="点击切换任务类型">${typeInfo ? typeInfo.label.split(' ')[0] : '＋类型'}</span>`;
     const arrowCell = i < steps.length - 1
-      ? `<div class="tl-arrow-cell" style="grid-column:${colIdx + 1};grid-row:1">鈫?/div>`
+      ? `<div class="tl-arrow-cell" style="grid-column:${colIdx + 1};grid-row:1">→</div>`
       : '';
     return `
       <div class="tl-title-cell" style="grid-column:${colIdx};grid-row:1">
-        <div class="tl-title-box" style="background:${color}" onclick="openStepPanel('${step.id}')" title="鐐瑰嚮鎵撳紑灞炴€ч潰鏉? style="cursor:pointer">
+        <div class="tl-title-box" style="background:${color}" onclick="openStepPanel('${step.id}')" title="点击打开属性面板" style="cursor:pointer">
           <div class="tl-title-inner">
             <span>${esc(step.name)}</span>
             ${badgeHtml}
@@ -709,47 +690,47 @@ function renderTimelineLayout() {
     `;
   }).join('');
 
-  // 鈹€鈹€ Row 2: Image锛堟棤鍥炬椂涓嶆覆鏌擄紝grid 鑷姩鎶樺彔璇ヨ锛夆攢鈹€
+  // ── Row 2: Image（无图时不渲染，grid 自动折叠该行）──
   const imgCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     const imgUrl = getResolvedImageUrl(step.imageUrl || (step.images && step.images[0]) || '');
     const sid = step.id;
     if (!imgUrl) {
-      // 鏃犲浘锛氭覆鏌撲竴涓瀬灏忕殑鍗犱綅瑙﹀彂鍖猴紝涓嶅崰瑙嗚绌洪棿
+      // 无图：渲染一个极小的占位触发区，不占视觉空间
       return `<div class="tl-img-cell tl-img-add" style="grid-column:${colIdx};grid-row:2"
                    onclick="pickStepImage('${sid}')"
                    ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
                    ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
                    ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-                   title="鐐瑰嚮鎴栨嫋鍏ユ坊鍔犲浘鐗?>锛?/div>`;
+                   title="点击或拖入添加图片">＋</div>`;
     }
     return `<div class="tl-img-cell" style="grid-column:${colIdx};grid-row:2">
       <div class="qt-img-zone tl-img-has-img" data-step-id="${sid}"
            ondragover="event.preventDefault();this.classList.add('qt-img-drop-hover')"
            ondragleave="if(!this.contains(event.relatedTarget))this.classList.remove('qt-img-drop-hover')"
            ondrop="event.preventDefault();this.classList.remove('qt-img-drop-hover');var f=event.dataTransfer.files[0];if(f)saveImageToStep(f,'${sid}')"
-           title="鎷栧叆鍥剧墖鍙浛鎹紱鍙屽嚮鏀惧ぇ">
-        <img class="tl-image" src="${esc(imgUrl)}" alt="閰嶅浘" loading="lazy"
+           title="拖入图片可替换；双击放大">
+        <img class="tl-image" src="${esc(imgUrl)}" alt="配图" loading="lazy"
              ondblclick="openImagePreview('${esc(imgUrl)}')" onerror="this.style.display='none'">
-        <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="鍒犻櫎鍥剧墖">脳</button>
+        <button class="qt-img-del-btn" onclick="event.stopPropagation();deleteStepImage('${sid}')" title="删除图片">×</button>
       </div>
     </div>`;
   }).join('');
 
-  // 鈹€鈹€ Row 3: Meta (trigger / location / characters / custom) 鈹€鈹€
+  // ── Row 3: Meta (trigger / location / characters / custom) ──
   const metaCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     const metaItems = [];
-    if (step.trigger)    metaItems.push(`<div class="tl-meta-item"><strong>瑙﹀彂锛?/strong>${esc(step.trigger)}</div>`);
-    if (step.location)   metaItems.push(`<div class="tl-meta-item"><strong>浣嶇疆锛?/strong>${esc(step.location)}</div>`);
-    if (step.characters) metaItems.push(`<div class="tl-meta-item"><strong>浜虹墿锛?/strong>${esc(step.characters)}</div>`);
+    if (step.trigger)    metaItems.push(`<div class="tl-meta-item"><strong>触发：</strong>${esc(step.trigger)}</div>`);
+    if (step.location)   metaItems.push(`<div class="tl-meta-item"><strong>位置：</strong>${esc(step.location)}</div>`);
+    if (step.characters) metaItems.push(`<div class="tl-meta-item"><strong>人物：</strong>${esc(step.characters)}</div>`);
     (step.customFields || []).forEach(f => {
-      if (f.key) metaItems.push(`<div class="tl-meta-item"><strong>${esc(f.key)}锛?/strong>${esc(f.value)}</div>`);
+      if (f.key) metaItems.push(`<div class="tl-meta-item"><strong>${esc(f.key)}：</strong>${esc(f.value)}</div>`);
     });
     return `<div class="tl-meta-cell" style="grid-column:${colIdx};grid-row:3"><div class="tl-meta">${metaItems.join('')}</div></div>`;
   }).join('');
 
-  // 鈹€鈹€ Row 4: Description 鈹€鈹€
+  // ── Row 4: Description ──
   const descCells = steps.map((step, i) => {
     const colIdx = i * 2 + 1;
     return `<div class="tl-desc-cell" style="grid-column:${colIdx};grid-row:4">
@@ -769,5 +750,6 @@ function renderTimelineLayout() {
     </div>
   `;
 
-  // 缁戝畾鍥剧墖鍖轰氦浜?  bindPreviewImageZones($previewCanvas);
+  // 绑定图片区交互
+  bindPreviewImageZones($previewCanvas);
 }
